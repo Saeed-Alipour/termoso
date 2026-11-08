@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type DragEvent } from "react";
 import { Box, Button, IconButton, Stack, Tooltip, Typography, alpha } from "@mui/material";
 import ReplayRoundedIcon from "@mui/icons-material/ReplayRounded";
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
@@ -17,6 +17,7 @@ import { HostGlyph } from "@/hosts/HostAvatar";
 import {
   closePane,
   focusPane,
+  mergeInto,
   mountPane,
   openTerminal,
   reconnectPane,
@@ -31,7 +32,10 @@ import { ConnectionView } from "./ConnectionView";
 import { usePaneTheme } from "./useTerminalTheme";
 import { dismissControlHint, useMultiplayer } from "./multiplayer";
 import type { TerminalTheme } from "./themes";
-import { tr } from "@/i18n";
+import { tr, trn } from "@/i18n";
+import { useSnackbar } from "@/components/Snackbar";
+import { MAX_SPLIT_PANES, nearestSide, type DropSide } from "./layout";
+import { setSessionDrag, useSessionDrag } from "./dragState";
 import { TypingBadge } from "./TypingBadge";
 import { ZmodemBar } from "./ZmodemBar";
 
@@ -90,6 +94,7 @@ export function TerminalPane({ paneId, active, showFrame }: Props) {
       }}
     >
       {showFrame && <PaneHeader pane={pane} active={active} theme={theme} />}
+      <DockOverlay paneId={paneId} />
       <Box sx={{ flex: 1, minHeight: 0, position: "relative", display: "flex" }}>
         <Box
           ref={hostRef}
@@ -138,6 +143,79 @@ export function TerminalPane({ paneId, active, showFrame }: Props) {
             </Button>
           </Stack>
         </Overlay>
+      )}
+    </Box>
+  );
+}
+
+const PANE_MIME = "application/x-termoso-pane";
+
+/**
+ * While a tab or another pane is being dragged, covers this pane with drop
+ * zones: the nearest edge shows where the dragged session will dock.
+ */
+function DockOverlay({ paneId }: { paneId: Uuid }) {
+  const drag = useSessionDrag();
+  const tab = useTerminal((s) => s.tabs.find((t) => t.paneIds.includes(paneId)));
+  const incoming = useTerminal((s) => {
+    if (!drag) return 0;
+    if (drag.kind === "pane") return 1;
+    return s.tabs.find((t) => t.id === drag.id)?.paneIds.length ?? 0;
+  });
+  const snackbar = useSnackbar();
+  const [side, setSide] = useState<DropSide | null>(null);
+  if (!drag || !tab) return null;
+  if (drag.kind === "tab" && drag.id === tab.id) return null;
+  if (drag.kind === "pane" && drag.id === paneId) return null;
+  const sameTab = drag.kind === "pane" && tab.paneIds.includes(drag.id);
+  const full = !sameTab && tab.paneIds.length + incoming > MAX_SPLIT_PANES;
+  const sideAt = (e: DragEvent<HTMLElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    return nearestSide((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
+  };
+  const zone = {
+    left: { left: 0, top: 0, bottom: 0, width: "50%" },
+    right: { right: 0, top: 0, bottom: 0, width: "50%" },
+    up: { left: 0, right: 0, top: 0, height: "50%" },
+    down: { left: 0, right: 0, bottom: 0, height: "50%" },
+  } as const;
+  return (
+    <Box
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = full ? "none" : "move";
+        setSide(sideAt(e));
+      }}
+      onDragLeave={() => setSide(null)}
+      onDrop={(e) => {
+        e.preventDefault();
+        const at = sideAt(e);
+        setSide(null);
+        const result = mergeInto(drag, tab.id, paneId, at);
+        if (result === "full") {
+          snackbar.notify(
+            trn(
+              MAX_SPLIT_PANES,
+              "A window holds up to {count} session",
+              "A window holds up to {count} sessions",
+            ),
+          );
+        }
+      }}
+      sx={{ position: "absolute", inset: 0, zIndex: 30 }}
+    >
+      {side && (
+        <Box
+          sx={{
+            position: "absolute",
+            ...zone[side],
+            borderRadius: 1.5,
+            pointerEvents: "none",
+            bgcolor: (t) => alpha(full ? t.palette.error.main : t.palette.primary.main, 0.22),
+            border: 2,
+            borderColor: full ? "error.main" : "primary.main",
+          }}
+        />
       )}
     </Box>
   );
@@ -202,8 +280,16 @@ function PaneHeader({
     <Stack
       direction="row"
       spacing={0.75}
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData(PANE_MIME, pane.id);
+        e.dataTransfer.setData("text/plain", pane.title);
+        e.dataTransfer.effectAllowed = "move";
+        setSessionDrag({ kind: "pane", id: pane.id });
+      }}
       sx={{
         alignItems: "center",
+        cursor: "grab",
         pl: 1,
         pr: 0.5,
         height: 28,

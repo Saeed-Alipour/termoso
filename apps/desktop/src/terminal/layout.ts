@@ -18,6 +18,8 @@ export type SplitNode =
     };
 
 export const MAX_PANES = 16;
+/** Sessions one window holds when splitting or dragging tabs together. */
+export const MAX_SPLIT_PANES = 4;
 export const MIN_RATIO = 0.1;
 
 export const leaf = (paneId: Uuid): SplitNode => ({ kind: "leaf", paneId });
@@ -65,6 +67,42 @@ export function removeLeaf(node: SplitNode, paneId: Uuid): SplitNode | null {
   if (first === null) return second;
   if (second === null) return first;
   return first === node.first && second === node.second ? node : { ...node, first, second };
+}
+
+export type DropSide = "left" | "right" | "up" | "down";
+
+/**
+ * Put `piece` (a pane or a whole sub-tree) next to the leaf `targetId`, on the
+ * given side of it. Returns the tree unchanged when the leaf is absent.
+ */
+export function insertBeside(
+  node: SplitNode,
+  targetId: Uuid,
+  piece: SplitNode,
+  side: DropSide,
+  splitId: string,
+): SplitNode {
+  if (node.kind === "leaf") {
+    if (node.paneId !== targetId) return node;
+    const before = side === "left" || side === "up";
+    return {
+      kind: "split",
+      id: splitId,
+      direction: side === "left" || side === "right" ? "row" : "column",
+      ratio: 0.5,
+      first: before ? piece : node,
+      second: before ? node : piece,
+    };
+  }
+  const first = insertBeside(node.first, targetId, piece, side, splitId);
+  const second = insertBeside(node.second, targetId, piece, side, splitId);
+  return first === node.first && second === node.second ? node : { ...node, first, second };
+}
+
+/** Which edge of a box a point is nearest to; `x` and `y` are 0–1 within it. */
+export function nearestSide(x: number, y: number): DropSide {
+  const d = { left: x, right: 1 - x, up: y, down: 1 - y };
+  return (Object.keys(d) as DropSide[]).reduce((a, b) => (d[b] < d[a] ? b : a));
 }
 
 export function replaceLeaf(node: SplitNode, paneId: Uuid, newPaneId: Uuid): SplitNode {

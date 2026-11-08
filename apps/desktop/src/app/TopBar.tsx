@@ -21,13 +21,17 @@ import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
 import type { DragEvent, MouseEvent, ReactNode } from "react";
 import type { HostCard, Uuid } from "@/ipc/types";
 import { PqBadge, StatusDot } from "@/terminal/TerminalPane";
+import { dragStore, setSessionDrag } from "@/terminal/dragState";
+import { MAX_SPLIT_PANES } from "@/terminal/layout";
 import { MultiplayerTabButton } from "@/terminal/MultiplayerControl";
 import {
   HOME_TAB,
   clearBuffer,
   closeTab,
   isWorkspaceTab,
+  mergeInto,
   moveTab,
+  movePaneToNewTab,
   openTerminal,
   renameTab,
   resetZoom,
@@ -67,7 +71,7 @@ import { VaultMenu, useActiveVault } from "./vault";
 import { IS_MAC, MAC_TRAFFIC_LIGHTS_WIDTH } from "@/lib/platform";
 import { withHint } from "./shortcuts";
 import { useEffect, useState } from "react";
-import { tr } from "@/i18n";
+import { tr, trn } from "@/i18n";
 
 /**
  * Persistent top strip, doubling as the window title bar (the native frame is
@@ -149,6 +153,18 @@ export function TopBar() {
       {tabs.length > 0 && <Divider orientation="vertical" flexItem sx={{ my: 1.25, mx: 0.5 }} />}
       <Box
         data-tauri-drag-region
+        // A pane dragged out of a split and dropped on free space becomes its own tab.
+        onDragOver={(e) => {
+          if (dragStore.get().drag?.kind !== "pane") return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+        }}
+        onDrop={(e) => {
+          const sd = dragStore.get().drag;
+          if (e.defaultPrevented || sd?.kind !== "pane") return;
+          e.preventDefault();
+          movePaneToNewTab(sd.id, null);
+        }}
         sx={{
           flex: 1,
           minWidth: 0,
@@ -304,11 +320,13 @@ function TerminalTopTab({
     {
       label: tr("Split right"),
       icon: <VerticalSplitRoundedIcon fontSize="small" />,
+      disabled: tab.paneIds.length >= MAX_SPLIT_PANES,
       onClick: () => splitActivePane(tab.id, "row"),
     },
     {
       label: tr("Split down"),
       icon: <HorizontalSplitRoundedIcon fontSize="small" />,
+      disabled: tab.paneIds.length >= MAX_SPLIT_PANES,
       onClick: () => splitActivePane(tab.id, "column"),
     },
     {
@@ -390,9 +408,11 @@ function TerminalTopTab({
     setMenu({ left: e.clientX, top: e.clientY });
   };
 
-  const side = (e: DragEvent<HTMLElement>) => {
+  /** Edges reorder (or place a detached pane); the middle docks into this tab's split. */
+  const zone = (e: DragEvent<HTMLElement>): "before" | "after" | "into" => {
     const r = e.currentTarget.getBoundingClientRect();
-    return e.clientX < r.left + r.width / 2 ? "before" : "after";
+    const x = (e.clientX - r.left) / r.width;
+    return x < 0.25 ? "before" : x > 0.75 ? "after" : "into";
   };
   const drag = {
     draggable: true,
@@ -400,6 +420,7 @@ function TerminalTopTab({
       e.dataTransfer.setData(TAB_MIME, tab.id);
       e.dataTransfer.effectAllowed = "move";
       onDragState(tab.id);
+      setSessionDrag({ kind: "tab", id: tab.id });
     },
     onDragEnd: () => {
       onDragState(null);
@@ -412,10 +433,17 @@ function TerminalTopTab({
         setOver("into");
         return;
       }
+      const sd = dragStore.get().drag;
+      if (sd?.kind === "pane") {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        setOver(zone(e));
+        return;
+      }
       if (!dragging || dragging === tab.id) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = "move";
-      setOver(side(e));
+      setOver(zone(e));
     },
     onDragLeave: () => setOver(null),
     onDrop: (e: DragEvent<HTMLElement>) => {
@@ -437,15 +465,38 @@ function TerminalTopTab({
         }
         return;
       }
+      const where = zone(e);
+      const full = () =>
+        snackbar.notify(
+          trn(
+            MAX_SPLIT_PANES,
+            "A window holds up to {count} session",
+            "A window holds up to {count} sessions",
+          ),
+        );
+      const nextTabId = () => {
+        const all = terminalStore.get().tabs;
+        return all[all.findIndex((t) => t.id === tab.id) + 1]?.id ?? null;
+      };
+      const sd = dragStore.get().drag;
+      if (sd?.kind === "pane") {
+        // A pane dragged out of a split: dock it here, or make it a tab at this spot.
+        e.preventDefault();
+        if (where === "into") {
+          if (mergeInto(sd, tab.id, tab.activePaneId, "right") === "full") full();
+        } else {
+          movePaneToNewTab(sd.id, where === "before" ? tab.id : nextTabId());
+        }
+        return;
+      }
       const id = e.dataTransfer.getData(TAB_MIME) || dragging;
       if (!id || id === tab.id) return;
       e.preventDefault();
-      const tabs = terminalStore.get().tabs;
-      if (side(e) === "before") moveTab(id, tab.id);
-      else {
-        const idx = tabs.findIndex((t) => t.id === tab.id);
-        moveTab(id, tabs[idx + 1]?.id ?? null);
-      }
+      if (where === "into") {
+        // Drop one session tab onto another: they share a window, split side by side.
+        if (mergeInto({ kind: "tab", id }, tab.id, tab.activePaneId, "right") === "full") full();
+      } else if (where === "before") moveTab(id, tab.id);
+      else moveTab(id, nextTabId());
     },
   };
 
