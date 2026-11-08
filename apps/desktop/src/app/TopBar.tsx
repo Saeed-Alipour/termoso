@@ -601,69 +601,78 @@ function TopTab({
   fluid,
 }: TopTabProps) {
   return (
-    <Box
-      role="tab"
-      aria-selected={active}
-      onClick={onClick}
-      onDoubleClick={onDoubleClick}
-      onContextMenu={onContextMenu}
-      onAuxClick={(e) => {
-        if (e.button === 1) onMiddleClick?.();
-      }}
-      {...drag}
-      sx={{
-        display: "flex",
-        alignItems: "center",
-        alignSelf: "center",
-        gap: 0.75,
-        height: 30,
-        pl: 1.25,
-        pr: onClose ? 0.5 : 1.25,
-        mx: 0.25,
-        // Chrome-style: every tab shrinks evenly as more open, the label
-        // truncates, and the close button always stays inside the tab.
-        flex: fluid ? "0 1 220px" : "0 0 auto",
-        minWidth: fluid ? (active ? 84 : 52) : 0,
-        maxWidth: 220,
-        borderRadius: 1.5,
-        cursor: "default",
-        opacity: faded ? 0.4 : 1,
-        boxShadow:
-          dropSide === "before"
-            ? "-2px 0 0 0 var(--mui-palette-primary-main)"
-            : dropSide === "after"
-              ? "2px 0 0 0 var(--mui-palette-primary-main)"
-              : dropSide === "into"
-                ? "inset 0 0 0 1.5px var(--mui-palette-primary-main)"
-                : "none",
-        bgcolor:
-          dropSide === "into" ? "action.selected" : active ? "surface.highest" : "transparent",
-        color: active ? "text.primary" : "text.secondary",
-        "&:hover": { bgcolor: active ? "surface.highest" : "action.hover", color: "text.primary" },
-        "&:hover .tab-close": { opacity: 1 },
-        "& > svg": { color: active ? "text.primary" : "text.secondary" },
-      }}
-    >
-      {icon}
-      {editor ?? (
-        <Typography variant="body2" noWrap sx={{ fontWeight: 500, flex: "1 1 auto", minWidth: 0 }}>
-          {label}
-        </Typography>
-      )}
-      {trailing}
-      {onClose && (
-        <IconButton
-          className="tab-close"
-          onClick={(e) => {
-            e.stopPropagation();
-            onClose();
-          }}
-          sx={{ opacity: active ? 0.7 : 0, width: 20, height: 20, ml: 0.25, flexShrink: 0 }}
-          aria-label={tr("Close {label}", { label })}
-        >
-          <CloseRoundedIcon sx={{ fontSize: 14 }} />
-        </IconButton>
-      )}
-    </Box>
+    <Tooltip title={editor ? "" : label} enterDelay={0} enterNextDelay={0} placement="bottom">
+      <Box
+        role="tab"
+        aria-selected={active}
+        onClick={onClick}
+        onDoubleClick={onDoubleClick}
+        onContextMenu={onContextMenu}
+        onAuxClick={(e) => {
+          if (e.button === 1) onMiddleClick?.();
+        }}
+        {...drag}
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          alignSelf: "center",
+          gap: 0.75,
+          height: 30,
+          pl: 1.25,
+          pr: onClose ? 0.5 : 1.25,
+          mx: 0.25,
+          // Chrome-style: every tab shrinks evenly as more open, the label
+          // truncates, and the close button always stays inside the tab.
+          flex: fluid ? "0 1 220px" : "0 0 auto",
+          minWidth: fluid ? (active ? 84 : 52) : 0,
+          maxWidth: 220,
+          borderRadius: 1.5,
+          cursor: "default",
+          opacity: faded ? 0.4 : 1,
+          boxShadow:
+            dropSide === "before"
+              ? "-2px 0 0 0 var(--mui-palette-primary-main)"
+              : dropSide === "after"
+                ? "2px 0 0 0 var(--mui-palette-primary-main)"
+                : dropSide === "into"
+                  ? "inset 0 0 0 1.5px var(--mui-palette-primary-main)"
+                  : "none",
+          bgcolor:
+            dropSide === "into" ? "action.selected" : active ? "surface.highest" : "transparent",
+          color: active ? "text.primary" : "text.secondary",
+          "&:hover": {
+            bgcolor: active ? "surface.highest" : "action.hover",
+            color: "text.primary",
+          },
+          "&:hover .tab-close": { opacity: 1 },
+          "& > svg": { color: active ? "text.primary" : "text.secondary" },
+        }}
+      >
+        {icon}
+        {editor ?? (
+          <Typography
+            variant="body2"
+            noWrap
+            sx={{ fontWeight: 500, flex: "1 1 auto", minWidth: 0 }}
+          >
+            {label}
+          </Typography>
+        )}
+        {trailing}
+        {onClose && (
+          <IconButton
+            className="tab-close"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
+            sx={{ opacity: active ? 0.7 : 0, width: 20, height: 20, ml: 0.25, flexShrink: 0 }}
+            aria-label={tr("Close {label}", { label })}
+          >
+            <CloseRoundedIcon sx={{ fontSize: 14 }} />
+          </IconButton>
+        )}
+      </Box>
+    </Tooltip>
   );
 }
