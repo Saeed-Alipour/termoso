@@ -616,9 +616,11 @@ function TopTab({
         pl: 1.25,
         pr: onClose ? 0.5 : 1.25,
         mx: 0.25,
-        minWidth: 0,
+        // Chrome-style: every tab shrinks evenly as more open, the label
+        // truncates, and the close button always stays inside the tab.
+        flex: "0 1 220px",
+        minWidth: active ? 84 : onClose ? 52 : 0,
         maxWidth: 220,
-        flexShrink: 0,
         borderRadius: 1.5,
         cursor: "default",
         opacity: faded ? 0.4 : 1,
@@ -640,7 +642,7 @@ function TopTab({
     >
       {icon}
       {editor ?? (
-        <Typography variant="body2" noWrap sx={{ fontWeight: 500 }}>
+        <Typography variant="body2" noWrap sx={{ fontWeight: 500, flex: "1 1 auto", minWidth: 0 }}>
           {label}
         </Typography>
       )}
@@ -652,7 +654,7 @@ function TopTab({
             e.stopPropagation();
             onClose();
           }}
-          sx={{ opacity: active ? 0.7 : 0, width: 20, height: 20, ml: 0.25 }}
+          sx={{ opacity: active ? 0.7 : 0, width: 20, height: 20, ml: 0.25, flexShrink: 0 }}
           aria-label={tr("Close {label}", { label })}
         >
           <CloseRoundedIcon sx={{ fontSize: 14 }} />
