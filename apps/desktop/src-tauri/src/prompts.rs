@@ -98,6 +98,13 @@ pub enum PromptAnswer {
     Interactive {
         answers: Vec<Zeroizing<String>>,
     },
+    /// Answer to [`PromptRequest::Password`]: log in with this keychain identity
+    /// instead. `remember` makes it the saved host's identity once the login works.
+    Identity {
+        id: Uuid,
+        #[serde(default)]
+        remember: bool,
+    },
     /// Plain yes (agent signature).
     Confirm,
     Cancel,
@@ -252,5 +259,32 @@ impl<R: Runtime> InteractivePrompt for UiInteractivePrompt<R> {
                 _ => None,
             }
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn identity_answer_carries_the_id_and_defaults_remember_to_false() {
+        let id = Uuid::new_v4();
+        let answer: PromptAnswer =
+            serde_json::from_str(&format!(r#"{{"kind":"identity","id":"{id}"}}"#)).unwrap();
+        match answer {
+            PromptAnswer::Identity { id: got, remember } => {
+                assert_eq!(got, id);
+                assert!(!remember);
+            }
+            other => panic!("unexpected answer {other:?}"),
+        }
+        let answer: PromptAnswer = serde_json::from_str(&format!(
+            r#"{{"kind":"identity","id":"{id}","remember":true}}"#
+        ))
+        .unwrap();
+        assert!(matches!(
+            answer,
+            PromptAnswer::Identity { remember: true, .. }
+        ));
     }
 }
