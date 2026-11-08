@@ -3,6 +3,7 @@
 // auth, prompts, history) is made in Rust — this file only moves bytes
 // between the IPC channel and xterm.js.
 
+import { layoutIndependentInput } from "./layoutKeys";
 import { copyToClipboard } from "@/lib/clipboard";
 import { Terminal, type IBuffer, type IDisposable } from "@xterm/xterm";
 import type { QueryClient } from "@tanstack/react-query";
@@ -696,7 +697,16 @@ function createRuntime(paneId: Uuid): Runtime {
       if (term.hasSelection()) void copyText(term.getSelection());
       return false;
     }
-    return !isAppShortcut(ev);
+    if (isAppShortcut(ev)) return false;
+    // Ctrl/Alt + letter on a non-Latin layout: xterm can't map those, so send
+    // the bytes for the physical key ourselves.
+    const raw = layoutIndependentInput(ev);
+    if (raw !== null) {
+      ev.preventDefault();
+      void sendInput(paneId, raw);
+      return false;
+    }
+    return true;
   });
 
   container.addEventListener("contextmenu", (ev) => {

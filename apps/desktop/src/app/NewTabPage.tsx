@@ -118,15 +118,35 @@ export function NewTabPage() {
   );
 
   const connect = (h: HostCard) => openHost(h);
+
+  // Result rows are the matches followed by the quick-connect row. Arrow keys
+  // move `picked`; until then Enter keeps its old default (the only match, or
+  // the quick-connect row when there are several).
+  const rowCount = matches.length + (quick ? 1 : 0);
+  const defaultRow =
+    matches[0] && (matches.length === 1 || !quick) ? 0 : quick ? matches.length : -1;
+  const [picked, setPicked] = useState<number | null>(null);
+  const active = picked !== null && picked < rowCount ? picked : defaultRow;
+  const activate = (i: number) => {
+    if (i < matches.length) connect(matches[i]);
+    else if (quick) openTerminal(quick);
+  };
   const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Escape") {
       if (q) setQuery("");
       else goHome();
       return;
     }
-    if (e.key !== "Enter") return;
-    if (matches[0] && (matches.length === 1 || !quick)) connect(matches[0]);
-    else if (quick) openTerminal(quick);
+    if (e.nativeEvent.isComposing) return;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      if (rowCount === 0) return;
+      e.preventDefault();
+      const step = e.key === "ArrowDown" ? 1 : -1;
+      setPicked(active < 0 ? (step > 0 ? 0 : rowCount - 1) : (active + step + rowCount) % rowCount);
+      return;
+    }
+    if (e.key !== "Enter" || active < 0) return;
+    activate(active);
   };
 
   return (
@@ -148,7 +168,10 @@ export function NewTabPage() {
             autoFocus
             fullWidth
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setPicked(null);
+            }}
             onKeyDown={onKey}
             placeholder={tr("Search hosts or type user@host:port to connect")}
             slotProps={{
@@ -165,9 +188,13 @@ export function NewTabPage() {
           {(matches.length > 0 || quick) && (
             <SectionCard sx={{ mt: 1, p: 0.5 }}>
               <List dense disablePadding>
-                {matches.map((h) => (
+                {matches.map((h, i) => (
                   <ListItemButton
                     key={h.id}
+                    selected={i === active}
+                    ref={(el) => {
+                      if (i === active) el?.scrollIntoView({ block: "nearest" });
+                    }}
                     onClick={() => connect(h)}
                     sx={{ borderRadius: 1.5, gap: 1.25 }}
                   >
@@ -177,6 +204,7 @@ export function NewTabPage() {
                 ))}
                 {quick && (
                   <ListItemButton
+                    selected={active === matches.length}
                     onClick={() => openTerminal(quick)}
                     sx={{ borderRadius: 1.5, gap: 1.25 }}
                   >
