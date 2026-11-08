@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useDeferredValue,
   useEffect,
   useMemo,
   useState,
@@ -264,7 +265,10 @@ export function HostsPage() {
     [tags.data, tagFilter],
   );
 
-  const q = search.trim().toLowerCase();
+  // The list filters on a deferred copy, so typing stays instant while a long
+  // host list catches up.
+  const deferredSearch = useDeferredValue(search);
+  const q = deferredSearch.trim().toLowerCase();
   const filtering = q.length > 0 || tagFilter.length > 0;
   /**
    * `ssh root@10.0.0.5` or `root@10.0.0.5:2222` search by the address part, so
@@ -461,8 +465,10 @@ export function HostsPage() {
     goToSftp();
   };
   const liveLink = isLiveLink(search) ? search.trim() : null;
-  const quickTarget =
-    !liveLink && looksLikeTarget(search.trim()) ? parseQuickConnect(search) : null;
+  const quickTarget = useMemo(
+    () => (!liveLink && looksLikeTarget(search.trim()) ? parseQuickConnect(search) : null),
+    [liveLink, search],
+  );
   const knownHosts = useKnownHosts();
   /** Hosts we already trust (known_hosts) but haven't saved, matching the typed address. */
   const knownSuggestions = useMemo(() => {
