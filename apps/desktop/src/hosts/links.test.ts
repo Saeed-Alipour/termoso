@@ -305,3 +305,33 @@ describe("connect and sftp links (command line)", () => {
     expect(connectQuickTarget(label)).toBeNull();
   });
 });
+
+describe("parseQuickConnect command lines", () => {
+  const ssh = (address: string, username: string | null, port: number | null) => ({
+    kind: "quick",
+    address,
+    username,
+    port,
+    protocol: "ssh",
+  });
+  it("understands `ssh user@host`", () => {
+    expect(parseQuickConnect("ssh root@172.20.8.12")).toEqual(ssh("172.20.8.12", "root", null));
+  });
+  it("understands -p and -l", () => {
+    expect(parseQuickConnect("ssh -p 2222 root@10.0.0.1")).toEqual(ssh("10.0.0.1", "root", 2222));
+    expect(parseQuickConnect("ssh root@10.0.0.1 -p 2222")).toEqual(ssh("10.0.0.1", "root", 2222));
+    expect(parseQuickConnect("ssh -l bob example.com")).toEqual(ssh("example.com", "bob", null));
+  });
+  it("understands `telnet host port`", () => {
+    expect(parseQuickConnect("telnet 10.0.0.9 2323")).toEqual({
+      kind: "quick",
+      address: "10.0.0.9",
+      username: null,
+      port: 2323,
+      protocol: "telnet",
+    });
+  });
+  it("leaves unknown options and plain text alone", () => {
+    expect(parseQuickConnect("ssh -o StrictHostKeyChecking=no root@h")).toBeNull();
+  });
+});

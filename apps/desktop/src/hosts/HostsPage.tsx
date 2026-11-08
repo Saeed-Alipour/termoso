@@ -89,6 +89,7 @@ import { useActiveVault, vaultIcon, ViewOnlyChip } from "@/app/vault";
 import type { CloudProvider, GroupNode, HostCard, HostsView, Uuid } from "@/ipc/types";
 import { connectProtocols, errorMessage, hasSsh, hasWebDav, hostProtocols } from "@/ipc/types";
 import { openTerminal, useTerminal } from "@/terminal/store";
+import { useOpenQuick } from "./useOpenQuick";
 import { addToWorkspace, useWorkspaces, workspaceChoices } from "@/terminal/workspaces";
 import { openSftpForHost, openWebDavForHost } from "@/sftp/store";
 import {
@@ -478,6 +479,7 @@ export function HostsPage() {
     openTerminal({ ...quickTarget, address: s.address, port: s.port ?? quickTarget.port });
     setSearch("");
   };
+  const openQuick = useOpenQuick(vaultId, readOnly, hosts.data ?? []);
   const onSearchEnter = () => {
     if (liveLink) {
       openTerminal({ kind: "live", link: liveLink });
@@ -490,7 +492,7 @@ export function HostsPage() {
       return;
     }
     if (quickTarget) {
-      openTerminal(quickTarget);
+      openQuick(quickTarget);
       setSearch("");
     }
   };

@@ -1,4 +1,5 @@
-import type { HostCard, HostProtocol, OpenTarget, Uuid } from "@/ipc/types";
+import { emptyHostForm } from "@/ipc/types";
+import type { HostCard, HostForm, HostProtocol, OpenTarget, Uuid } from "@/ipc/types";
 
 export type QuickTarget = Extract<OpenTarget, { kind: "quick" }>;
 
@@ -18,8 +19,45 @@ function parsePort(raw: string | undefined): number | null | undefined {
  * `ssh://user@host:port`, `telnet://host:port`, `telnet:host:port`.
  * Credentials embedded in the URL are dropped — passwords never travel in links.
  */
+/**
+ * `ssh root@host`, `ssh -p 2222 root@host`, `ssh -l root host`, `telnet host 23`
+ * → the URL form (`ssh://root@host:2222`) the parser below understands. Anything
+ * else (including a plain `user@host`) comes back unchanged.
+ */
+function fromCommandLine(input: string): string {
+  const m = /^(ssh|telnet)\s+(.+)$/i.exec(input.trim());
+  if (!m?.[1] || !m[2]) return input;
+  const protocol = m[1].toLowerCase();
+  let port: string | undefined;
+  let user: string | undefined;
+  const rest: string[] = [];
+  const words = m[2].trim().split(/\s+/);
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i] ?? "";
+    if (w === "-p" || w === "-l") {
+      const v = words[++i];
+      if (v === undefined) return input;
+      if (w === "-p") port = v;
+      else user = v;
+    } else if (/^-[pl]./.test(w)) {
+      if (w.startsWith("-p")) port = w.slice(2);
+      else user = w.slice(2);
+    } else if (w.startsWith("-")) {
+      return input; // options we don't understand: leave it alone
+    } else {
+      rest.push(w);
+    }
+  }
+  if (protocol === "telnet" && rest.length === 2) port = rest.pop();
+  if (rest.length !== 1) return input;
+  const target = rest[0] ?? "";
+  const withUser = user && !target.includes("@") ? `${user}@${target}` : target;
+  const hasPort = /(?:^|[^:]):\d+$|\]:\d+$/.test(withUser);
+  return `${protocol}://${withUser}${port && !hasPort ? `:${port}` : ""}`;
+}
+
 export function parseQuickConnect(input: string): QuickTarget | null {
-  const s = input.trim();
+  const s = fromCommandLine(input).trim();
   if (!s) return null;
   const scheme = /^(ssh|telnet):(?:\/\/)?/i.exec(s);
   const protocol = scheme?.[1]?.toLowerCase() === "telnet" ? "telnet" : "ssh";
@@ -40,6 +78,35 @@ export function parseQuickConnect(input: string): QuickTarget | null {
     username: protocol === "telnet" || !username ? null : username,
     port,
     protocol,
+  };
+}
+
+/** A saved host that a typed target already points at (same address, port and user). */
+export function savedHostFor(t: QuickTarget, hosts: HostCard[]): HostCard | undefined {
+  const addr = t.address.toLowerCase();
+  const want: HostProtocol = t.protocol;
+  return hosts.find(
+    (h) =>
+      h.protocol === want &&
+      h.address.toLowerCase() === addr &&
+      h.port === (t.port ?? (want === "telnet" ? 23 : 22)) &&
+      (want === "telnet" || !t.username || h.username === t.username),
+  );
+}
+
+/** Host-list entry for a typed SSH target; Telnet quick connects are not saved. */
+export function quickHostForm(
+  t: QuickTarget,
+  vaultId: Uuid,
+  groupId: Uuid | null,
+): HostForm | null {
+  if (t.protocol !== "ssh") return null;
+  return {
+    ...emptyHostForm(vaultId, groupId),
+    label: t.address,
+    address: t.address,
+    port: t.port && t.port !== 22 ? t.port : null,
+    username: t.username ?? "",
   };
 }
 

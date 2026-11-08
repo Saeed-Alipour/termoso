@@ -29,6 +29,7 @@ import { useHistory, useHosts } from "@/ipc/hooks";
 import { scopedTo } from "@/history/scope";
 import { useActiveVault } from "./vault";
 import { openTerminal } from "@/terminal/store";
+import { useOpenQuick } from "@/hosts/useOpenQuick";
 import {
   createTemplate,
   deleteTemplate,
@@ -118,6 +119,7 @@ export function NewTabPage() {
   );
 
   const connect = (h: HostCard) => openHost(h);
+  const openQuick = useOpenQuick(vault.data?.id ?? null, vault.readOnly, hosts.data ?? []);
 
   // Result rows are the matches followed by the quick-connect row. Arrow keys
   // move `picked`; until then Enter keeps its old default (the only match, or
@@ -129,7 +131,7 @@ export function NewTabPage() {
   const active = picked !== null && picked < rowCount ? picked : defaultRow;
   const activate = (i: number) => {
     if (i < matches.length) connect(matches[i]);
-    else if (quick) openTerminal(quick);
+    else if (quick) openQuick(quick);
   };
   const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Escape") {
@@ -205,7 +207,7 @@ export function NewTabPage() {
                 {quick && (
                   <ListItemButton
                     selected={active === matches.length}
-                    onClick={() => openTerminal(quick)}
+                    onClick={() => openQuick(quick)}
                     sx={{ borderRadius: 1.5, gap: 1.25 }}
                   >
                     <IconTile size={sizes.tileSmall} tone="accent">

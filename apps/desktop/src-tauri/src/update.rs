@@ -243,9 +243,15 @@ mod tests {
     fn poll_intervals() {
         assert_eq!(poll_interval("manual"), None);
         assert_eq!(poll_interval("startup"), None);
-        assert_eq!(poll_interval("every_6h"), Some(Duration::from_secs(6 * 3600)));
+        assert_eq!(
+            poll_interval("every_6h"),
+            Some(Duration::from_secs(6 * 3600))
+        );
         assert_eq!(poll_interval("daily"), Some(Duration::from_secs(24 * 3600)));
-        assert_eq!(poll_interval("weekly"), Some(Duration::from_secs(7 * 24 * 3600)));
+        assert_eq!(
+            poll_interval("weekly"),
+            Some(Duration::from_secs(7 * 24 * 3600))
+        );
     }
 
     #[test]
