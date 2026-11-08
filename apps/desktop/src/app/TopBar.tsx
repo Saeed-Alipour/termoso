@@ -456,6 +456,7 @@ function TerminalTopTab({
         drag={drag}
         dropSide={over}
         faded={dragging === tab.id}
+        fluid
         onClick={() => setActiveTab(tab.id)}
         onDoubleClick={() => setRenaming(true)}
         onContextMenu={onContextMenu}
@@ -517,6 +518,8 @@ interface TopTabProps {
   drag?: Partial<DragHandlers> & { draggable?: boolean };
   dropSide?: DropSide;
   faded?: boolean;
+  /** Session tabs: start at full width and shrink as more open; others fit their content. */
+  fluid?: boolean;
 }
 
 interface DragHandlers {
@@ -595,6 +598,7 @@ function TopTab({
   drag,
   dropSide,
   faded,
+  fluid,
 }: TopTabProps) {
   return (
     <Box
@@ -618,8 +622,8 @@ function TopTab({
         mx: 0.25,
         // Chrome-style: every tab shrinks evenly as more open, the label
         // truncates, and the close button always stays inside the tab.
-        flex: "0 1 220px",
-        minWidth: active ? 84 : onClose ? 52 : 0,
+        flex: fluid ? "0 1 220px" : "0 0 auto",
+        minWidth: fluid ? (active ? 84 : 52) : 0,
         maxWidth: 220,
         borderRadius: 1.5,
         cursor: "default",
