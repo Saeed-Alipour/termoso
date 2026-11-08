@@ -1,4 +1,4 @@
-import { Box, Divider, IconButton, Tooltip, Typography, alpha } from "@mui/material";
+import { Box, Divider, IconButton, Tooltip, Typography, alpha, keyframes } from "@mui/material";
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import AddBoxRoundedIcon from "@mui/icons-material/AddBoxRounded";
@@ -118,6 +118,8 @@ export function TopBar() {
         bgcolor: (t) => alpha(t.palette.primary.main, 0.14),
         color: "text.primary",
         pointerEvents: "none",
+        transformOrigin: "left center",
+        animation: `${ghostIn} 150ms cubic-bezier(0.2, 0.8, 0.2, 1)`,
       }}
     >
       <Typography variant="body2" noWrap sx={{ fontWeight: 500 }}>
@@ -328,6 +330,11 @@ function PaneTools({ tab }: { tab: TerminalTab }) {
 }
 
 const TAB_MIME = "application/x-termoso-tab";
+
+const ghostIn = keyframes`
+  from { opacity: 0; transform: scaleX(0.6); }
+  to { opacity: 1; transform: scaleX(1); }
+`;
 
 /** Where a drag hovers a tab: reorder before / after it, or drop hosts into it. */
 type DropSide = "before" | "after" | "into" | null;

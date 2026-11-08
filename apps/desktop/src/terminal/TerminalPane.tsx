@@ -1,6 +1,15 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import { createPortal } from "react-dom";
-import { Box, Button, IconButton, Stack, Tooltip, Typography, alpha } from "@mui/material";
+import {
+  Box,
+  Button,
+  IconButton,
+  Stack,
+  Tooltip,
+  Typography,
+  alpha,
+  keyframes,
+} from "@mui/material";
 import ReplayRoundedIcon from "@mui/icons-material/ReplayRounded";
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import ShieldRoundedIcon from "@mui/icons-material/ShieldRounded";
@@ -36,7 +45,14 @@ import type { TerminalTheme } from "./themes";
 import { tr, trn } from "@/i18n";
 import { useSnackbar } from "@/components/Snackbar";
 import { MAX_SPLIT_PANES, nearestSide, type DropSide } from "./layout";
-import { setSessionDrag, useSessionDrag } from "./dragState";
+import {
+  hideDockPreview,
+  justDocked,
+  setSessionDrag,
+  showDockPreview,
+  useDockPreview,
+  useSessionDrag,
+} from "./dragState";
 import { TypingBadge } from "./TypingBadge";
 import { ZmodemBar } from "./ZmodemBar";
 
@@ -48,6 +64,8 @@ interface Props {
 
 export function TerminalPane({ paneId, active, showFrame }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
+  // A pane that was just docked or detached eases in instead of popping.
+  const [fadeIn] = useState(justDocked);
   const pane = useTerminal((s) => s.panes[paneId]);
   const queued = useTerminal((s) => s.reconnect?.paneIds.includes(paneId) ?? false);
   const theme = usePaneTheme(paneId);
@@ -92,6 +110,7 @@ export function TerminalPane({ paneId, active, showFrame }: Props) {
             : "0 0 0 1px var(--mui-palette-border-light)"
           : "none",
         transition: "box-shadow 120ms",
+        animation: fadeIn ? `${paneIn} 180ms cubic-bezier(0.2, 0.8, 0.2, 1)` : undefined,
       }}
     >
       {showFrame && <PaneHeader pane={pane} active={active} theme={theme} />}
@@ -151,6 +170,11 @@ export function TerminalPane({ paneId, active, showFrame }: Props) {
 
 const PANE_MIME = "application/x-termoso-pane";
 
+const paneIn = keyframes`
+  from { opacity: 0.35; transform: scale(0.985); }
+  to { opacity: 1; transform: scale(1); }
+`;
+
 /**
  * While a tab or another pane is being dragged, covers this pane with drop
  * zones: the nearest edge shows where the dragged session will dock.
@@ -164,7 +188,6 @@ function DockOverlay({ paneId }: { paneId: Uuid }) {
     return s.tabs.find((t) => t.id === drag.id)?.paneIds.length ?? 0;
   });
   const snackbar = useSnackbar();
-  const [target, setTarget] = useState<DockTarget | null>(null);
   if (!drag || !tab) return null;
   if (drag.kind === "tab" && drag.id === tab.id) return null;
   if (drag.kind === "pane" && drag.id === paneId) return null;
@@ -175,13 +198,13 @@ function DockOverlay({ paneId }: { paneId: Uuid }) {
       onDragOver={(e) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = full ? "none" : "move";
-        setTarget(dockTargetAt(e));
+        showDockPreview({ rect: dockTargetAt(e).rect, full });
       }}
-      onDragLeave={() => setTarget(null)}
+      onDragLeave={hideDockPreview}
       onDrop={(e) => {
         e.preventDefault();
         const at = dockTargetAt(e);
-        setTarget(null);
+        hideDockPreview();
         const result = mergeInto(drag, tab.id, paneId, at.side, at.scope);
         if (result === "full") {
           snackbar.notify(
@@ -194,24 +217,33 @@ function DockOverlay({ paneId }: { paneId: Uuid }) {
         }
       }}
       sx={{ position: "absolute", inset: 0, zIndex: 30 }}
-    >
-      {target &&
-        createPortal(
-          <Box
-            sx={{
-              position: "fixed",
-              ...target.rect,
-              zIndex: 1500,
-              borderRadius: 1.5,
-              pointerEvents: "none",
-              bgcolor: (t) => alpha(full ? t.palette.error.main : t.palette.primary.main, 0.22),
-              border: 2,
-              borderColor: full ? "error.main" : "primary.main",
-            }}
-          />,
-          document.body,
-        )}
-    </Box>
+    ></Box>
+  );
+}
+
+/** The one docking preview: glides between zones and fades in and out. Mount once. */
+export function DockPreviewLayer() {
+  const { preview, last: at, slide } = useDockPreview();
+  const shown = preview !== null;
+  if (!at) return null;
+  return createPortal(
+    <Box
+      sx={{
+        position: "fixed",
+        ...at.rect,
+        zIndex: 1500,
+        borderRadius: 1.5,
+        pointerEvents: "none",
+        opacity: shown ? 1 : 0,
+        bgcolor: (t) => alpha(at.full ? t.palette.error.main : t.palette.primary.main, 0.22),
+        border: 2,
+        borderColor: at.full ? "error.main" : "primary.main",
+        transition: slide
+          ? "left 140ms cubic-bezier(0.2, 0.8, 0.2, 1), top 140ms cubic-bezier(0.2, 0.8, 0.2, 1), width 140ms cubic-bezier(0.2, 0.8, 0.2, 1), height 140ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 120ms"
+          : "opacity 120ms",
+      }}
+    />,
+    document.body,
   );
 }
 
