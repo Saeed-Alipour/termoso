@@ -1,12 +1,16 @@
 import {
   useCallback,
   useDeferredValue,
+  startTransition,
   useEffect,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   type MouseEvent,
   type ReactElement,
 } from "react";
+import { flushSync } from "react-dom";
 import { copyToClipboard } from "@/lib/clipboard";
 import {
   Box,
@@ -173,6 +177,72 @@ type Ctx =
 const isEditable = (t: EventTarget | null) =>
   t instanceof HTMLElement &&
   (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
+
+/**
+ * The search field keeps the text it shows in its own state and hands it to the
+ * page as a low-priority update, so typing never waits for the host list (or the
+ * rest of the page) to re-render.
+ */
+function SearchBox({
+  value,
+  placeholder,
+  onChange,
+  onEnter,
+}: {
+  value: string;
+  placeholder: string;
+  onChange: (s: string) => void;
+  onEnter: () => void;
+}) {
+  const [local, setLocal] = useState(value);
+  // Values handed to the page that it has not yet reported back.
+  const inFlight = useRef<string[]>([]);
+  const enter = useRef(onEnter);
+  useLayoutEffect(() => {
+    enter.current = onEnter;
+  });
+  useEffect(() => {
+    const i = inFlight.current.indexOf(value);
+    if (i >= 0) {
+      inFlight.current.splice(0, i + 1);
+      return;
+    }
+    // Changed from outside (cleared after connecting, Escape, …).
+    inFlight.current = [];
+    setLocal(value);
+  }, [value]);
+  const push = (s: string) => {
+    setLocal(s);
+    inFlight.current.push(s);
+    startTransition(() => onChange(s));
+  };
+  return (
+    <TextField
+      placeholder={placeholder}
+      value={local}
+      onChange={(e) => push(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          // Make the page see exactly what is typed before it acts on it.
+          flushSync(() => onChange(local));
+          enter.current();
+        }
+        if (e.key === "Escape") push("");
+        if (e.key === "ArrowDown" && focusFirstHostItem()) e.preventDefault();
+      }}
+      sx={{ flex: 1 }}
+      slotProps={{
+        input: {
+          startAdornment: (
+            <InputAdornment position="start">
+              <SearchRoundedIcon fontSize="small" />
+            </InputAdornment>
+          ),
+        },
+      }}
+    />
+  );
+}
 
 export function HostsPage() {
   const snackbar = useSnackbar();
@@ -850,7 +920,7 @@ export function HostsPage() {
     <Box sx={{ display: "flex", flex: 1, minHeight: 0 }}>
       <Box sx={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
         <Stack direction="row" spacing={1} sx={{ px: 2, pt: 1.5, pb: 1, alignItems: "center" }}>
-          <TextField
+          <SearchBox
             placeholder={
               groupId
                 ? tr("Search this group, or type user@host:port and press Enter to connect")
@@ -859,22 +929,8 @@ export function HostsPage() {
                   )
             }
             value={search}
-            onChange={(e) => updateSearch(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") onSearchEnter();
-              if (e.key === "Escape") updateSearch("");
-              if (e.key === "ArrowDown" && focusFirstHostItem()) e.preventDefault();
-            }}
-            sx={{ flex: 1 }}
-            slotProps={{
-              input: {
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchRoundedIcon fontSize="small" />
-                  </InputAdornment>
-                ),
-              },
-            }}
+            onChange={updateSearch}
+            onEnter={onSearchEnter}
           />
           <Tooltip
             title={
