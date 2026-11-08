@@ -2837,7 +2837,7 @@
   "Never these paths": "Никогда эти пути",
   "{files} files from {hosts} hosts, {size}": "{files} файлов с {hosts} хостов, {size}",
   "Encrypted offline copies of remote files. Turn them on per host under Files.": "Зашифрованные офлайн-копии удалённых файлов. Включаются для каждого хоста в его настройках.",
-  "Access key ID": "Access key ID",
+  "Access key ID": "ID ключа доступа",
   "Add S3": "Добавить S3",
   "API path": "Путь API",
   "Bucket": "Бакет",
@@ -2849,8 +2849,7 @@
   "Only when the S3 API is mounted below a path on the host (reverse proxy). The endpoint itself is the address above.": "Только если S3 API доступен по пути на хосте (обратный прокси). Сам сервер указан в адресе выше.",
   "Open S3": "Открыть S3",
   "Remove S3": "Удалить S3",
-  "S3": "S3",
-  "Secret access key": "Secret access key",
+  "Secret access key": "Секретный ключ доступа",
   "Signing region; empty means us-east-1 (MinIO, RustFS). Cloudflare R2 takes auto.": "Регион для подписи; пустое поле означает us-east-1 (MinIO, RustFS). Cloudflare R2 принимает auto.",
   "with S3": "с S3"
 }
