@@ -547,8 +547,9 @@ pub(crate) async fn startup(app: tauri::AppHandle) {
     {
         return;
     }
-    if settings.update_check == "startup" {
+    if settings.update_check != "manual" {
         update::check_on_startup(&app).await;
     }
+    tauri::async_runtime::spawn(update::scheduler(app.clone()));
     tauri::async_runtime::spawn(cloud_sync::scheduler(app));
 }

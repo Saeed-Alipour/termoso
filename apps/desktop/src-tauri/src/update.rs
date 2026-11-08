@@ -4,6 +4,7 @@
 //! for it or explicitly enables the startup check.
 
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
@@ -172,6 +173,51 @@ pub async fn check_on_startup<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
+/// How often `updateCheck` asks for a background check after the startup one;
+/// `None` for the modes that never poll (`manual`, `startup`).
+pub fn poll_interval(setting: &str) -> Option<Duration> {
+    let hours = match setting {
+        "every_6h" => 6,
+        "daily" => 24,
+        "weekly" => 24 * 7,
+        _ => return None,
+    };
+    Some(Duration::from_secs(hours * 3600))
+}
+
+/// Background checks for the interval modes. The setting is re-read every
+/// minute, so changing it (or switching back to "manual") takes effect without
+/// a restart. A version is announced once, so a dismissed banner stays gone.
+pub async fn scheduler<R: Runtime>(app: AppHandle<R>) {
+    let mut last = Instant::now();
+    let mut announced: Option<String> = None;
+    loop {
+        tokio::time::sleep(Duration::from_secs(60)).await;
+        let Ok(settings) = app.state::<AppState>().settings() else {
+            continue;
+        };
+        let Some(every) = poll_interval(&settings.update_check) else {
+            last = Instant::now();
+            continue;
+        };
+        if last.elapsed() < every {
+            continue;
+        }
+        last = Instant::now();
+        match check(&app).await {
+            Ok(Some(i)) => {
+                if announced.as_deref() != Some(i.version.as_str()) {
+                    tracing::info!(version = %i.version, "update available");
+                    announced = Some(i.version.clone());
+                    emit(&app, UpdateEvent::Available { info: i });
+                }
+            }
+            Ok(None) => tracing::debug!("no update available"),
+            Err(e) => tracing::warn!("scheduled update check failed: {e}"),
+        }
+    }
+}
+
 fn poisoned() -> DesktopError {
     DesktopError::new("internal", "updater state poisoned")
 }
@@ -191,6 +237,21 @@ mod tests {
         let u =
             feed_url("https://updates.example.org/termoso/{{target}}/{{current_version}}").unwrap();
         assert_eq!(u.host_str(), Some("updates.example.org"));
+    }
+
+    #[test]
+    fn poll_intervals() {
+        assert_eq!(poll_interval("manual"), None);
+        assert_eq!(poll_interval("startup"), None);
+        assert_eq!(
+            poll_interval("every_6h"),
+            Some(Duration::from_secs(6 * 3600))
+        );
+        assert_eq!(poll_interval("daily"), Some(Duration::from_secs(24 * 3600)));
+        assert_eq!(
+            poll_interval("weekly"),
+            Some(Duration::from_secs(7 * 24 * 3600))
+        );
     }
 
     #[test]

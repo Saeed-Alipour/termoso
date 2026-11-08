@@ -205,9 +205,13 @@ installed) cross-builds the Intel one on an Apple Silicon machine.
 ## How the updater behaves
 
 - **Off by default.** The app never contacts any server unless the user
-  clicks _Check for updates_ or turns on _Check on startup_ in Settings →
-  Updates. There is no background polling and no telemetry of any kind in the
-  request — it is a plain `GET` of `latest.json`.
+  clicks _Check for updates_ or picks an automatic check in Settings →
+  Updates: _Once at startup_, or additionally _Every 6 hours_, _Daily_ or
+  _Weekly_ while the app is running (re-read from the setting every minute, so
+  switching back to _Only when I ask_ stops it at once). Without one of those
+  there is no background polling. A found version is announced once, and there
+  is no telemetry of any kind in the request — it is a plain `GET` of
+  `latest.json`.
 - **Explicit install.** A found update is shown with its notes; download and
   installation start only when the user asks, and the app restarts only when
   the user confirms.
