@@ -83,8 +83,8 @@ function paneProtocol(pane: Pane, host: HostCard | undefined): SessionInfo["prot
       return pane.target.protocol ?? "ssh";
     case "host": {
       if (pane.target.protocol) return pane.target.protocol;
-      // WebDAV-only hosts open in Files, never in a pane.
-      return host && host.protocol !== "webdav" ? host.protocol : "ssh";
+      // WebDAV- and S3-only hosts open in Files, never in a pane.
+      return host && host.protocol !== "webdav" && host.protocol !== "s3" ? host.protocol : "ssh";
     }
     case "live":
       return "multiplayer";

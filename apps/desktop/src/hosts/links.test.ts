@@ -154,6 +154,7 @@ const card = (over: Partial<HostCard>): HostCard => ({
   protocol: "ssh",
   telnetPort: null,
   webdavUrl: null,
+  s3Url: null,
   useMosh: false,
   groupId: null,
   groupPath: [],

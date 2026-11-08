@@ -45,7 +45,7 @@ export function hostIcon(
 }
 
 /** Protocols a glyph can stand for: saved-host sections plus the session-only ones. */
-export type GlyphProtocol = SessionInfo["protocol"] | "webdav";
+export type GlyphProtocol = SessionInfo["protocol"] | "webdav" | "s3";
 
 /** Glyph for a host's icon (chosen or detected), or the protocol fallback while unknown. */
 export function HostGlyph({
@@ -71,7 +71,7 @@ export function HostGlyph({
 export function ProtocolGlyph({ protocol, ...props }: { protocol: GlyphProtocol } & SvgIconProps) {
   if (protocol === "telnet" || protocol === "local") return <TerminalRoundedIcon {...props} />;
   if (protocol === "serial") return <UsbRoundedIcon {...props} />;
-  if (protocol === "webdav") return <CloudRoundedIcon {...props} />;
+  if (protocol === "webdav" || protocol === "s3") return <CloudRoundedIcon {...props} />;
   return <DnsRoundedIcon {...props} />;
 }
 
