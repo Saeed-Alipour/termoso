@@ -426,6 +426,8 @@ export interface HostCard {
   telnetPort: number | null;
   /** Collection URL when the host has a WebDAV section. */
   webdavUrl: string | null;
+  /** `host[:port]/bucket/prefix/` when the host has an S3 section. */
+  s3Url: string | null;
   /** The SSH section connects over Mosh by default. */
   useMosh: boolean;
   tags: string[];
@@ -485,6 +487,8 @@ export interface HostForm {
   telnet: TelnetForm | null;
   /** WebDAV section: a file share browsed from Files, next to or instead of SSH. */
   webdav: WebDavForm | null;
+  /** S3 section: a bucket on an S3-compatible endpoint at the host's address. */
+  s3: S3Form | null;
   envVariables: [string, string][];
   keepAliveInterval: number | null;
   timeout: number | null;
@@ -573,8 +577,50 @@ export function emptyWebDavForm(): WebDavForm {
   };
 }
 
-/** Protocol of a host section. `webdav` is a file share, not a terminal. */
-export type HostProtocol = "ssh" | "telnet" | "webdav";
+export interface S3Form {
+  bucket: string;
+  /** Signing region; "" = us-east-1. */
+  region: string;
+  /** TCP port; null = 443 (80 with `http`). */
+  port: number | null;
+  /** Path the S3 API is mounted below on the host; "" = `/`. */
+  path: string;
+  /** Key prefix opened as the root; "" = the whole bucket. */
+  prefix: string;
+  http: boolean;
+  /** `bucket.host` addressing instead of `host/bucket`. */
+  virtualHost: boolean;
+  tlsServerName: string | null;
+  caCertificate: string | null;
+  accessKey: string;
+  /** null keeps the stored secret when editing; "" clears it. */
+  secretKey: string | null;
+  identityId: Uuid | null;
+  certificateFingerprint: string | null;
+  hasSecretKey: boolean;
+}
+
+export function emptyS3Form(): S3Form {
+  return {
+    bucket: "",
+    region: "",
+    port: null,
+    path: "",
+    prefix: "",
+    http: false,
+    virtualHost: false,
+    tlsServerName: null,
+    caCertificate: null,
+    accessKey: "",
+    secretKey: null,
+    identityId: null,
+    certificateFingerprint: null,
+    hasSecretKey: false,
+  };
+}
+
+/** Protocol of a host section. `webdav` and `s3` are file stores, not terminals. */
+export type HostProtocol = "ssh" | "telnet" | "webdav" | "s3";
 
 /** Terminal protocols. */
 export type TerminalProtocol = "ssh" | "telnet";
@@ -585,7 +631,7 @@ export type ConnectProtocol = TerminalProtocol | "mosh";
 /** Terminal protocols a saved host can be opened with (empty for WebDAV-only hosts). */
 export function hostProtocols(h: Pick<HostCard, "protocol" | "telnetPort">): TerminalProtocol[] {
   if (h.protocol === "telnet") return ["telnet"];
-  if (h.protocol === "webdav") return [];
+  if (h.protocol === "webdav" || h.protocol === "s3") return [];
   return h.telnetPort === null ? ["ssh"] : ["ssh", "telnet"];
 }
 
@@ -604,6 +650,11 @@ export function hasSsh(h: Pick<HostCard, "protocol">): boolean {
 /** The host has a WebDAV section browsable from Files. */
 export function hasWebDav(h: Pick<HostCard, "protocol" | "webdavUrl">): boolean {
   return h.protocol === "webdav" || h.webdavUrl !== null;
+}
+
+/** The host has an S3 section browsable from Files. */
+export function hasS3(h: Pick<HostCard, "protocol" | "s3Url">): boolean {
+  return h.protocol === "s3" || h.s3Url !== null;
 }
 
 export type IpVersion = "auto" | "4" | "6";
@@ -731,6 +782,7 @@ export function emptyHostForm(vaultId: Uuid, groupId: Uuid | null): HostForm {
     macAddress: null,
     telnet: null,
     webdav: null,
+    s3: null,
     envVariables: [],
     keepAliveInterval: null,
     timeout: null,
@@ -2186,6 +2238,7 @@ export type SftpTarget =
   | { kind: "host"; host_id: Uuid; vault_id?: Uuid | null; sudo_password?: string | null }
   | { kind: "session"; session_id: Uuid }
   | { kind: "webdav"; host_id: Uuid; vault_id?: Uuid | null }
+  | { kind: "s3"; host_id: Uuid; vault_id?: Uuid | null }
   /** Read-only view of the host's offline copies; no connection is made. */
   | { kind: "offline"; host_id: Uuid };
 
@@ -2213,7 +2266,7 @@ export interface FileCacheOverview {
   hosts: FileCacheHost[];
 }
 
-export type RemoteProtocol = "sftp" | "webdav";
+export type RemoteProtocol = "sftp" | "webdav" | "s3";
 
 /** What the remote side supports; the panel hides controls it cannot honour. */
 export interface RemoteCapabilities {

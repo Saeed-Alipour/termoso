@@ -6,7 +6,7 @@ import SwapHorizRoundedIcon from "@mui/icons-material/SwapHorizRounded";
 import { Button } from "@mui/material";
 import type { MenuAction } from "@/components/ui";
 import { goToSftp, requestForwardingRule } from "@/app/navigation";
-import { openSftpForHost, openWebDavForHost } from "@/sftp/store";
+import { openS3ForHost, openSftpForHost, openWebDavForHost } from "@/sftp/store";
 import { openTerminal } from "@/terminal/store";
 import type { ConnectProtocol, HostCard, Uuid } from "@/ipc/types";
 import { tr } from "@/i18n";
@@ -21,7 +21,13 @@ export const PROTOCOL_NAME: Record<ConnectProtocol, string> = {
 };
 
 /** What the primary Connect opens: a terminal protocol, or the WebDAV share in Files. */
-export type ConnectTarget = ConnectProtocol | "webdav";
+export type ConnectTarget = ConnectProtocol | "webdav" | "s3";
+
+/** Opens the host's S3 bucket in the files view. */
+export function openS3(h: HostRef) {
+  openS3ForHost(h.id, h.label, h.vaultId);
+  goToSftp();
+}
 
 /** Opens the host's WebDAV share in the files view. */
 export function openWebDav(h: HostRef) {
@@ -32,6 +38,7 @@ export function openWebDav(h: HostRef) {
 /** Opens a saved host the way its primary section dictates. */
 export function connectTo(h: HostRef, target: ConnectTarget | null) {
   if (target === "webdav") openWebDav(h);
+  else if (target === "s3") openS3(h);
   else openTerminal({ kind: "host", host_id: h.id, vault_id: h.vaultId, protocol: target });
 }
 
@@ -44,6 +51,7 @@ export function connectActions(
   h: HostRef,
   protocols: ConnectProtocol[],
   webdav = false,
+  s3 = false,
 ): MenuAction[] {
   const ssh = protocols.includes("ssh");
   return [
@@ -69,6 +77,15 @@ export function connectActions(
             label: tr("with WebDAV"),
             icon: <CloudRoundedIcon fontSize="small" />,
             onClick: () => openWebDav(h),
+          },
+        ]
+      : []),
+    ...(s3
+      ? [
+          {
+            label: tr("with S3"),
+            icon: <CloudRoundedIcon fontSize="small" />,
+            onClick: () => openS3(h),
           },
         ]
       : []),
@@ -99,7 +116,7 @@ export function ConnectButton({
   /** Runs instead of opening the saved host (e.g. save first, then connect). */
   onClick?: () => void;
 }) {
-  const webdav = target === "webdav";
+  const webdav = target === "webdav" || target === "s3";
   return (
     <Button
       fullWidth

@@ -1,6 +1,6 @@
 ---
-title: Files: SFTP and WebDAV
-description: A two-pane file manager for SFTP and WebDAV hosts, with a transfer queue, server-to-server copies, editing in place and system Files integration on Android.
+title: Files: SFTP, WebDAV and S3
+description: A two-pane file manager for SFTP, WebDAV and S3 hosts, with a transfer queue, server-to-server copies, editing in place and system Files integration on Android.
 ---
 
 Open **SFTP** in the sidebar, then pick a host or an already connected session for the right pane. The left pane is your local machine by default; both panes can be remote, and a tab can hold a different pair of panes than the next.
@@ -69,6 +69,30 @@ A host can carry a WebDAV share next to (or instead of) SSH: **Add WebDAV** in t
 | **Authentication** | Basic/Digest (user + password) or a bearer token; both are stored in the vault, never in the host record. |
 
 The browser is the same as for SFTP, and WebDAV hosts show up in the same places (Connections, **Copy to…**, the Android Files app).
+
+## S3
+
+A host can also carry an **S3** bucket: **Add S3** in the host details. It works with any S3-compatible endpoint: AWS S3, MinIO, RustFS, Cloudflare R2, Backblaze B2, Ceph RGW, Garage. The endpoint is the host's **address**; the section adds what S3 needs:
+
+| Field | Meaning |
+| --- | --- |
+| **Bucket** | The bucket to open. Lowercase letters, digits, dots and hyphens. |
+| **Port** | TCP port; empty means 443, or 80 when plain HTTP is on (MinIO and RustFS default to 9000). |
+| **Region** | The SigV4 signing region. Empty means `us-east-1`, which self-hosted servers accept; R2 takes `auto`. |
+| **Key prefix** | A "folder" inside the bucket to open as the root, e.g. `backups/2026`. Empty opens the whole bucket. |
+| **API path** | Only when the S3 API is served below a path on the host (a reverse proxy). Empty means `/`. |
+| **Bucket in the host name** | `bucket.host` addressing, the AWS default. Leave it off for MinIO, RustFS and most self-hosted servers, which expect `host/bucket`. |
+| **Access key ID / Secret access key** | The key pair; the secret is stored in the vault, never in the host record. A missing secret is asked for on connect. |
+| **Plain HTTP**, **Server name (SNI)**, **Certificate authority**, **Server certificate fingerprint** | As for WebDAV: TLS is on by default, a private CA or a pinned SHA-256 replaces the system trust store, and an unknown certificate is offered on first connect. |
+
+S3 is object storage, not a filesystem, and the Files view does not pretend otherwise:
+
+- **Folders** are key prefixes split on `/`, the way every S3 console shows them. Creating an empty folder stores a zero-byte `prefix/` marker object; a folder that only exists because keys start with it has nothing to delete.
+- **Rename and move** copy the object (server-side, multipart above 5 GiB) and delete the original. Renaming a folder does this for every key under it.
+- **Permissions, owners and symlinks** do not exist in S3, so those controls are hidden.
+- Uploads above 16 MiB go as multipart uploads; downloads resume with HTTP ranges, and **offline copies** work as for SFTP.
+
+S3 hosts show up where WebDAV ones do: Connections, **Copy to…**, and the Android Files app (**Settings → Files → Show SFTP hosts in Files**).
 
 ### TLS
 

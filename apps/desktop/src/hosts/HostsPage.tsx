@@ -87,10 +87,17 @@ import {
 } from "@/ipc/hooks";
 import { useActiveVault, vaultIcon, ViewOnlyChip } from "@/app/vault";
 import type { CloudProvider, GroupNode, HostCard, HostsView, Uuid } from "@/ipc/types";
-import { connectProtocols, errorMessage, hasSsh, hasWebDav, hostProtocols } from "@/ipc/types";
+import {
+  connectProtocols,
+  errorMessage,
+  hasS3,
+  hasSsh,
+  hasWebDav,
+  hostProtocols,
+} from "@/ipc/types";
 import { openTerminal, useTerminal } from "@/terminal/store";
 import { addToWorkspace, useWorkspaces, workspaceChoices } from "@/terminal/workspaces";
-import { openSftpForHost, openWebDavForHost } from "@/sftp/store";
+import { openS3ForHost, openSftpForHost, openWebDavForHost } from "@/sftp/store";
 import {
   goToSerial,
   goToSettingsWith,
@@ -432,8 +439,12 @@ export function HostsPage() {
         { background: background || i > 0 },
       ),
     );
-    const files = list.filter((h) => hostProtocols(h).length === 0 && hasWebDav(h));
-    files.forEach((h) => openWebDavForHost(h.id, h.label, h.vaultId));
+    const files = list.filter((h) => hostProtocols(h).length === 0 && (hasWebDav(h) || hasS3(h)));
+    files.forEach((h) =>
+      hasWebDav(h)
+        ? openWebDavForHost(h.id, h.label, h.vaultId)
+        : openS3ForHost(h.id, h.label, h.vaultId),
+    );
     if (files.length > 0 && terminal.length === 0) goToSftp();
   };
   const connectHost = (h: HostCard) => connectHosts([h]);
@@ -448,6 +459,10 @@ export function HostsPage() {
   };
   const webdavHost = (h: HostCard) => {
     openWebDavForHost(h.id, h.label, h.vaultId);
+    goToSftp();
+  };
+  const s3Host = (h: HostCard) => {
+    openS3ForHost(h.id, h.label, h.vaultId);
     goToSftp();
   };
   const liveLink = isLiveLink(search) ? search.trim() : null;
@@ -579,9 +594,9 @@ export function HostsPage() {
         : {
             label: tr("Connect"),
             icon: <PlayArrowRoundedIcon fontSize="small" />,
-            items: connectActions(h, connectProtocols(h), hasWebDav(h)),
+            items: connectActions(h, connectProtocols(h), hasWebDav(h), hasS3(h)),
           },
-      ...(hasWebDav(h) && !hasSsh(h)
+      ...((hasWebDav(h) || hasS3(h)) && !hasSsh(h)
         ? []
         : [
             {
@@ -597,6 +612,16 @@ export function HostsPage() {
               label: tr("Open WebDAV"),
               icon: <CloudRoundedIcon fontSize="small" />,
               onClick: () => webdavHost(h),
+              disabled: many,
+            },
+          ]
+        : []),
+      ...(hasS3(h)
+        ? [
+            {
+              label: tr("Open S3"),
+              icon: <CloudRoundedIcon fontSize="small" />,
+              onClick: () => s3Host(h),
               disabled: many,
             },
           ]

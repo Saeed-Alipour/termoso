@@ -223,6 +223,16 @@ export const openWebDavForHost = (
   openSftp({ kind: "webdav", host_id: hostId, vault_id: vaultId }, title, hostId, side);
 };
 
+export const openS3ForHost = (
+  hostId: Uuid,
+  title: string,
+  vaultId: Uuid | null = null,
+  side: PaneSide = "right",
+) => {
+  if (!requirePerm(vaultId, "connect.sftp")) return;
+  openSftp({ kind: "s3", host_id: hostId, vault_id: vaultId }, title, hostId, side);
+};
+
 /** Capabilities of a connection; full SFTP until Rust reports otherwise. */
 export const connCapabilities = (c: SftpConn | undefined): RemoteCapabilities =>
   c?.info?.capabilities ?? SFTP_CAPABILITIES;
