@@ -74,6 +74,7 @@ fun SftpPickScreen(shell: ShellViewModel, onBack: () -> Unit, onOpened: (String)
                 buildList {
                     if (h.protocol.equals("ssh", ignoreCase = true)) add(FileTarget(h, FileProtocol.SFTP))
                     if (h.webdavUrl != null) add(FileTarget(h, FileProtocol.WEBDAV))
+                    if (h.s3Url != null) add(FileTarget(h, FileProtocol.S3))
                 }
             }
         loaded = true

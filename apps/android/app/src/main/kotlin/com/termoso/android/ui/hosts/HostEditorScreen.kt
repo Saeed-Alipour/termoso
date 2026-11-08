@@ -107,6 +107,7 @@ import com.termoso.core.TelnetDraft
 import com.termoso.core.VaultAccess
 import com.termoso.core.VaultInfo
 import com.termoso.core.VaultKind
+import com.termoso.core.S3Draft
 import com.termoso.core.WebDavDraft
 import com.termoso.core.moshDefaultServerCommand
 import kotlinx.coroutines.launch
@@ -127,6 +128,7 @@ fun HostEditorScreen(
     onConnect: (String) -> Unit = {},
     onSftp: (String) -> Unit = {},
     onWebdav: (String) -> Unit = {},
+    onS3: (String) -> Unit = {},
     onForward: (String) -> Unit = {},
 ) {
     val initialVault by shell.selectedVaultId.collectAsStateWithLifecycle()
@@ -184,6 +186,13 @@ fun HostEditorScreen(
                                         leadingIcon = { Icon(Icons.Filled.Terminal, null) },
                                         enabled = state.canSave,
                                         onClick = { menu = false; saveThen(onConnect) },
+                                    )
+                                }
+                                if (draft.s3 != null) {
+                                    DropdownMenuItem(
+                                        text = { Text(if (savedId == null) stringResource(R.string.save_and_open_s3) else stringResource(R.string.s3_files)) },
+                                        leadingIcon = { Icon(Icons.Filled.CloudQueue, contentDescription = null) },
+                                        onClick = { menu = false; saveThen(onS3) },
                                     )
                                 }
                                 if (draft.webdav != null) {
@@ -291,6 +300,7 @@ fun draftLink(d: HostDraft): String {
         d.ssh -> hostLink("ssh", d.username, d.address.trim(), d.port?.toInt() ?: 22)
         telnet != null -> hostLink("telnet", "", d.address.trim(), telnet.port?.toInt() ?: 23)
         webdav != null -> webdavLink(d.address.trim(), webdav)
+        d.s3 != null -> s3Link(d.address.trim(), d.s3!!)
         else -> hostLink("ssh", d.username, d.address.trim(), d.port?.toInt() ?: 22)
     }
 }
@@ -350,7 +360,8 @@ private fun HostForm(
 
         val telnet = draft.telnet
         val webdav = draft.webdav
-        val sections = (if (draft.ssh) 1 else 0) + (if (telnet != null) 1 else 0) + (if (webdav != null) 1 else 0)
+        val s3 = draft.s3
+        val sections = (if (draft.ssh) 1 else 0) + (if (telnet != null) 1 else 0) + (if (webdav != null) 1 else 0) + (if (s3 != null) 1 else 0)
         if (draft.ssh) {
             ProtocolHeader("SSH", removable = sections > 1) { vm.update { it.copy(ssh = false) } }
             SshSection(state, draft, vm, inherited, identity)
@@ -451,7 +462,56 @@ private fun HostForm(
             }
         }
 
-        if (!draft.ssh || telnet == null || webdav == null) {
+        if (s3 != null) {
+            ProtocolHeader("S3", removable = sections > 1) { vm.update { it.copy(s3 = null) } }
+            SectionCard {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    FormField(s3.bucket, { v -> vm.updateS3 { it.copy(bucket = v) } }, stringResource(R.string.s3_bucket), placeholder = "my-bucket", keyboard = KeyboardType.Uri)
+                    FormField(
+                        s3.port?.toString() ?: "",
+                        { v -> vm.updateS3 { it.copy(port = v.filter(Char::isDigit).take(5).toIntOrNull()?.takeIf { p -> p in 1..65535 }?.toUShort()) } },
+                        stringResource(R.string.webdav_port),
+                        placeholder = if (s3.http) "80" else "443",
+                        keyboard = KeyboardType.Number,
+                    )
+                    FormField(s3.region, { v -> vm.updateS3 { it.copy(region = v) } }, stringResource(R.string.s3_region), placeholder = "us-east-1")
+                    Text(stringResource(R.string.s3_region_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    FormField(s3.prefix, { v -> vm.updateS3 { it.copy(prefix = v) } }, stringResource(R.string.s3_prefix), placeholder = "backups/2026", keyboard = KeyboardType.Uri)
+                    Text(stringResource(R.string.s3_prefix_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    FormField(s3.path, { v -> vm.updateS3 { it.copy(path = v) } }, stringResource(R.string.s3_path), placeholder = "/", keyboard = KeyboardType.Uri)
+                    Text(stringResource(R.string.s3_path_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    FormField(s3.accessKey, { v -> vm.updateS3 { it.copy(accessKey = v) } }, stringResource(R.string.s3_access_key), keyboard = KeyboardType.Ascii)
+                    PasswordField(
+                        password = s3.secretKey,
+                        hasPassword = s3.hasSecretKey,
+                        inheritedHint = false,
+                        onChange = { v -> vm.updateS3 { it.copy(secretKey = v) } },
+                        label = stringResource(R.string.s3_secret_key),
+                        savedLabel = stringResource(R.string.s3_secret_key_saved),
+                    )
+                    Text(stringResource(R.string.s3_credentials_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                RowDivider()
+                SwitchRow(
+                    title = stringResource(R.string.s3_virtual_host),
+                    subtitle = stringResource(R.string.s3_virtual_host_hint),
+                    checked = s3.virtualHost,
+                    onCheckedChange = { on -> vm.updateS3 { it.copy(virtualHost = on) } },
+                )
+                RowDivider()
+                SwitchRow(
+                    title = stringResource(R.string.webdav_plain_http),
+                    checked = s3.http,
+                    onCheckedChange = { on -> vm.updateS3 { it.copy(http = on) } },
+                )
+                if (!s3.http) {
+                    RowDivider()
+                    S3TlsBlock(vm, s3)
+                }
+            }
+        }
+
+        if (!draft.ssh || telnet == null || webdav == null || s3 == null) {
             Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (!draft.ssh) {
                     TextButton(onClick = { vm.update { it.copy(ssh = true) } }) {
@@ -469,6 +529,12 @@ private fun HostForm(
                     TextButton(onClick = { vm.update { it.copy(webdav = emptyWebDavDraft()) } }) {
                         Icon(Icons.Filled.Add, contentDescription = null)
                         Text(stringResource(R.string.add_webdav))
+                    }
+                }
+                if (s3 == null) {
+                    TextButton(onClick = { vm.update { it.copy(s3 = emptyS3Draft()) } }) {
+                        Icon(Icons.Filled.Add, contentDescription = null)
+                        Text(stringResource(R.string.add_s3))
                     }
                 }
             }
@@ -922,6 +988,45 @@ private fun webdavLink(address: String, w: WebDavDraft): String {
     val port = w.port?.let { ":$it" } ?: ""
     val path = "/" + w.path.trim().trim('/')
     return "$scheme://$address$port${if (path == "/") "/" else "$path/"}"
+}
+
+/** `host[:port]/bucket/prefix/` the way the core shows an S3 section. */
+private fun s3Link(address: String, s: S3Draft): String {
+    val port = s.port?.let { ":$it" } ?: ""
+    val prefix = s.prefix.trim().trim('/')
+    return "$address$port/${s.bucket.trim()}/" + if (prefix.isEmpty()) "" else "$prefix/"
+}
+
+/** TLS name override, private CA and pinned fingerprint of an S3 section. */
+@Composable
+private fun S3TlsBlock(vm: HostEditorViewModel, s3: S3Draft) {
+    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(stringResource(R.string.webdav_tls), style = MaterialTheme.typography.titleSmall)
+        FormField(
+            s3.tlsServerName ?: "",
+            { v -> vm.updateS3 { it.copy(tlsServerName = v.trim().ifEmpty { null }) } },
+            stringResource(R.string.webdav_tls_server_name),
+            placeholder = "s3.internal",
+            keyboard = KeyboardType.Uri,
+        )
+        Text(stringResource(R.string.webdav_tls_server_name_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(stringResource(R.string.webdav_ca_certificate), style = MaterialTheme.typography.bodyMedium)
+        KeyTextArea(
+            value = s3.caCertificate ?: "",
+            onChange = { v -> vm.updateS3 { it.copy(caCertificate = v.ifBlank { null }) } },
+            placeholder = stringResource(R.string.begin_certificate_placeholder),
+            minLines = 3,
+        )
+        Text(stringResource(R.string.webdav_ca_certificate_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        FormField(
+            s3.certificateFingerprint ?: "",
+            { v -> vm.updateS3 { it.copy(certificateFingerprint = v.trim().ifEmpty { null }) } },
+            stringResource(R.string.certificate_fingerprint_sha_256),
+            placeholder = "aa:bb:cc:…",
+            keyboard = KeyboardType.Ascii,
+        )
+        Text(stringResource(R.string.webdav_fingerprint_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
 }
 
 private fun hasAdvanced(d: HostDraft) =
