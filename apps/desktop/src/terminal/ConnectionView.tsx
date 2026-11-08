@@ -324,7 +324,11 @@ export function ConnectionView({ pane }: { pane: Pane }) {
                 </Button>
               </>
             ) : (
-              <Button variant="tonal" onClick={() => void closePane(pane.id)}>
+              <Button
+                variant="tonal"
+                {...{ "data-prompt-cancel": "" }}
+                onClick={() => void closePane(pane.id)}
+              >
                 {tr("Cancel")}
               </Button>
             )}
