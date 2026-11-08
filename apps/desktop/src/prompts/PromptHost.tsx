@@ -288,6 +288,9 @@ function HostKeyPrompt({
           <Button
             variant="contained"
             color={changed ? "error" : "primary"}
+            // Enter trusts a first-time host. A changed key (possible MITM) is
+            // never the default: it needs the explicit "verified" tick first.
+            autoFocus={!changed}
             disabled={changed && !verified}
             onClick={() => decide("accept_and_save")}
           >
