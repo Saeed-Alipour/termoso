@@ -98,6 +98,13 @@ pub enum PromptAnswer {
     Interactive {
         answers: Vec<Zeroizing<String>>,
     },
+    /// Answer to [`PromptRequest::Password`]: log in with this keychain identity
+    /// instead. `remember` makes it the saved host's identity once the login works.
+    Identity {
+        id: Uuid,
+        #[serde(default)]
+        remember: bool,
+    },
     /// Plain yes (agent signature).
     Confirm,
     Cancel,

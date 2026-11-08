@@ -2150,6 +2150,8 @@ export interface PromptClosedEvent {
 export type PromptAnswer =
   | { kind: "host_key"; decision: "reject" | "accept_once" | "accept_and_save" }
   | { kind: "secret"; value: string; remember: boolean }
+  /** Answer to a password prompt: sign in with this keychain identity instead. */
+  | { kind: "identity"; id: Uuid; remember: boolean }
   | { kind: "interactive"; answers: string[] }
   | { kind: "confirm" }
   | { kind: "cancel" };
