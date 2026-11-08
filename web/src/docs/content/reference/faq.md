@@ -40,7 +40,7 @@ Linux (x86_64, aarch64), Windows, macOS (Apple Silicon and Intel), Android (arm6
 It is the youngest: encrypted local vault, host editor and SSH terminal are there; sync, SFTP and port forwarding are not yet. The release notes say when that changes.
 
 **Is Android really not worse than the desktop?**
-Feature for feature it is the most complete mobile client in the project: SSH, Mosh, Telnet, local shell with a [full Linux environment](/docs/terminal/linux-on-android), SFTP and WebDAV with system Files integration, port forwarding, serial over USB, FIDO2 over USB/NFC, snippets, terminal sharing, gestures with an on-screen indicator, voice input and image/file paste.
+Feature for feature it is the most complete mobile client in the project: SSH, Mosh, Telnet, local shell with a [full Linux environment](/docs/terminal/linux-on-android), SFTP, WebDAV and S3 with system Files integration, port forwarding, serial over USB, FIDO2 over USB/NFC, snippets, terminal sharing, gestures with an on-screen indicator, voice input and image/file paste.
 
 **Does it work on a Chromebook or in an emulator?**
 Yes — install the `x86_64` or universal APK. The Alpine Linux environment is hidden on x86_64 because of an Android seccomp rule; Ubuntu works.

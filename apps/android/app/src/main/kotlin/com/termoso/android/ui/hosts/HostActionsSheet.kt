@@ -54,20 +54,23 @@ fun hostSubtitle(h: HostItem): String {
     val target = if (h.username.isNotBlank()) "${h.username}@${h.address}" else h.address
     val ssh = h.protocol.equals("ssh", true)
     val webdavOnly = h.protocol.equals("webdav", true)
+    val s3Only = h.protocol.equals("s3", true)
     val base = when {
         webdavOnly -> "$target · WebDAV"
+        s3Only -> "${h.s3Url ?: target} · S3"
         ssh && h.port == 22.toUShort() -> target
         else -> "$target · ${h.protocol.uppercase()} ${h.port}"
     }
     val mosh = if (ssh && h.useMosh) " · Mosh" else ""
     val telnet = if (ssh && h.telnetPort != null) " · Telnet" else ""
     val webdav = if (!webdavOnly && h.webdavUrl != null) " · WebDAV" else ""
-    return base + mosh + telnet + webdav
+    val s3 = if (!s3Only && h.s3Url != null) " · S3" else ""
+    return base + mosh + telnet + webdav + s3
 }
 
 /** `ssh://user@host[:port]` (or `telnet://…`; the share URL for WebDAV-only hosts) for the clipboard; the default port is left out. */
 fun hostLink(h: HostItem): String =
-    if (h.protocol.equals("webdav", true)) h.webdavUrl ?: h.address else hostLink(h.protocol, h.username, h.address, h.port.toInt())
+    if (h.protocol.equals("webdav", true)) h.webdavUrl ?: h.address else if (h.protocol.equals("s3", true)) h.s3Url ?: h.address else hostLink(h.protocol, h.username, h.address, h.port.toInt())
 
 fun hostLink(protocol: String, username: String, address: String, port: Int): String {
     val ssh = protocol.equals("ssh", true)
@@ -96,6 +99,7 @@ fun HostActionsSheet(
     onConnect: (Transport) -> Unit,
     onSftp: () -> Unit,
     onWebdav: () -> Unit,
+    onS3: () -> Unit = {},
     onOpenSftp: (String) -> Unit,
     onOpenTerminal: () -> Unit,
     onForward: () -> Unit,
@@ -118,7 +122,8 @@ fun HostActionsSheet(
     val ssh = host.protocol.equals("ssh", true)
     val telnet = ssh && host.telnetPort != null
     val webdav = host.webdavUrl != null
-    val terminal = !host.protocol.equals("webdav", true)
+    val s3 = host.s3Url != null
+    val terminal = !host.protocol.equals("webdav", true) && !host.protocol.equals("s3", true)
 
     fun then(action: () -> Unit): () -> Unit = { onClose(); action() }
 
@@ -197,6 +202,9 @@ fun HostActionsSheet(
                     }
                     RowDivider()
                     ActionRow(Icons.Filled.FolderOpen, "SFTP", onClick = then(onSftp))
+                }
+                if (s3) {
+                    ActionRow(Icons.Filled.CloudQueue, stringResource(R.string.s3_files), onClick = then(onS3))
                 }
                 if (webdav) {
                     if (terminal) RowDivider()

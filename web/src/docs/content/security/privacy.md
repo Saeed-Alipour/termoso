@@ -9,7 +9,7 @@ description: Termoso collects nothing. Here is exactly which network connections
 
 | Connection                                     | When                                                                                                                                                  |
 | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Your SSH, Mosh, Telnet, SFTP and WebDAV hosts  | When you connect to them                                                                                                                              |
+| Your SSH, Mosh, Telnet, SFTP, WebDAV and S3 hosts | When you connect to them                                                                                                                              |
 | The server you signed in to                    | Only if you signed in; for sync, teams and account settings                                                                                           |
 | Update check (desktop)                         | Only when you press **Check now** or chose **Once at startup**                                                                                        |
 | Cloud provider APIs (AWS, DigitalOcean, Azure) | Only when you use an import integration                                                                                                               |

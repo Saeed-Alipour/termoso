@@ -95,6 +95,8 @@ class SftpDocumentsProvider : DocumentsProvider() {
             }
             val url = host.webdavUrl
             if (url != null) addRoot(cursor, host, FileProtocol.WEBDAV, url.removePrefix("https://").removePrefix("http://").trimEnd('/'))
+            val s3 = host.s3Url
+            if (s3 != null) addRoot(cursor, host, FileProtocol.S3, s3.trimEnd('/'))
         }
         return cursor
     }
@@ -104,7 +106,14 @@ class SftpDocumentsProvider : DocumentsProvider() {
         cursor.newRow()
             .add(Root.COLUMN_ROOT_ID, DocumentId.rootId(host.id, protocol))
             .add(Root.COLUMN_DOCUMENT_ID, DocumentId.root(host.id, protocol).encode())
-            .add(Root.COLUMN_TITLE, if (protocol == FileProtocol.WEBDAV && host.protocol != "webdav") "$title (WebDAV)" else title)
+            .add(
+                Root.COLUMN_TITLE,
+                when {
+                    protocol == FileProtocol.WEBDAV && host.protocol != "webdav" -> "$title (WebDAV)"
+                    protocol == FileProtocol.S3 && host.protocol != "s3" -> "$title (S3)"
+                    else -> title
+                },
+            )
             .add(Root.COLUMN_SUMMARY, summary)
             .add(Root.COLUMN_FLAGS, Root.FLAG_SUPPORTS_CREATE or Root.FLAG_SUPPORTS_IS_CHILD)
             .add(Root.COLUMN_ICON, R.mipmap.ic_launcher)

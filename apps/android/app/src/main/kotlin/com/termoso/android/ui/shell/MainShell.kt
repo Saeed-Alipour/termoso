@@ -377,11 +377,15 @@ fun MainShell(
         shell.launch { shell.openSftpHost(hostId, FileProtocol.WEBDAV)?.let { openSftp(it.id) } }
     }
 
+    fun s3Host(hostId: String) {
+        shell.launch { shell.openSftpHost(hostId, FileProtocol.S3)?.let { openSftp(it.id) } }
+    }
+
     /** "Connect" on a host: a terminal, or the Files browser when the host is WebDAV-only. */
     fun connectHost(hostId: String, transport: Transport = Transport.AUTO) {
         shell.launch {
             if (!shell.hasTerminal(hostId)) {
-                shell.openSftpHost(hostId, FileProtocol.WEBDAV)?.let { openSftp(it.id) }
+                shell.openSftpHost(hostId)?.let { openSftp(it.id) }
             } else if (shell.connectHost(hostId, transport) != null) {
                 shell.selectedVaultId.value?.let { RecentShortcuts.record(context, shell.repo, hostId, it) }
                 openTerminal()
@@ -613,6 +617,7 @@ fun MainShell(
                     onConnectWith = ::connectHost,
                     onSftp = ::sftpHost,
                     onWebdav = ::webdavHost,
+                    onS3 = ::s3Host,
                     onOpenSftp = ::openSftp,
                     onOpenTerminal = ::openTerminal,
                     onForward = { nav.navigate(Routes.pfNew(PfKind.LOCAL, null, it)) },
@@ -631,6 +636,7 @@ fun MainShell(
                     onConnect = { connectHost(it) },
                     onSftp = ::sftpHost,
                     onWebdav = ::webdavHost,
+                    onS3 = ::s3Host,
                     onForward = { nav.navigate(Routes.pfNew(PfKind.LOCAL, null, it)) },
                 )
             }
@@ -644,6 +650,7 @@ fun MainShell(
                     onConnect = { connectHost(it) },
                     onSftp = ::sftpHost,
                     onWebdav = ::webdavHost,
+                    onS3 = ::s3Host,
                     onForward = { nav.navigate(Routes.pfNew(PfKind.LOCAL, null, it)) },
                 )
             }

@@ -25,7 +25,7 @@ Keys, certificates, identities and FIDO2 security keys are stored once in the Ke
 | ----------------------------------- | ------- | ----------------- | ------- | ----------- |
 | Terminal (SSH, Mosh, Telnet, local) | ✓       | ✓                 | SSH     | —           |
 | Linux userland for the local shell  | your OS | ✓ Alpine / Ubuntu | —       | —           |
-| SFTP and WebDAV                     | ✓       | ✓                 | —       | —           |
+| SFTP, WebDAV and S3                 | ✓       | ✓                 | —       | —           |
 | Port forwarding                     | ✓       | ✓                 | —       | —           |
 | Serial                              | ✓       | ✓ (USB)           | —       | —           |
 | Keychain, snippets, known hosts     | ✓       | ✓                 | partial | —           |

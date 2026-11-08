@@ -33,7 +33,7 @@ import SyncRoundedIcon from "@mui/icons-material/SyncRounded";
 import { useActiveVault } from "@/app/vault";
 import * as ipc from "@/ipc/commands";
 import type { Conflict, Direction, FsEntry, HostCard, Uuid } from "@/ipc/types";
-import { errorMessage, hasSsh, hasWebDav } from "@/ipc/types";
+import { errorMessage, hasS3, hasSsh, hasWebDav } from "@/ipc/types";
 import { useHosts, useSettings } from "@/ipc/hooks";
 import { useSnackbar } from "@/components/Snackbar";
 import { IconTile, Toolbar } from "@/components/ui";
@@ -57,6 +57,7 @@ import {
   openSftpForHostAsRoot,
   openSftpForSession,
   openSftpOffline,
+  openS3ForHost,
   openWebDavForHost,
   reconnectSftp,
   setActiveSftp,
@@ -378,7 +379,7 @@ export function SftpPage() {
         <RemotePlaceholder
           side={pane}
           status={picking ? null : (conn?.status ?? null)}
-          webdav={conn?.target.kind === "webdav"}
+          webdav={conn?.target.kind === "webdav" || conn?.target.kind === "s3"}
           message={picking ? null : (conn?.message ?? null)}
           onRetry={conn && !picking ? () => reconnectSftp(conn.id) : undefined}
           onBrowseOffline={
@@ -640,15 +641,18 @@ function HostPickerList({ side }: { side: PaneKey }) {
     !q ||
     h.label.toLowerCase().includes(q) ||
     h.address.toLowerCase().includes(q) ||
-    (h.webdavUrl ?? "").toLowerCase().includes(q);
+    (h.webdavUrl ?? "").toLowerCase().includes(q) ||
+    (h.s3Url ?? "").toLowerCase().includes(q);
   const all = hosts.data ?? [];
   const sshHosts = all.filter((h) => hasSsh(h) && matches(h));
   const davHosts = all.filter((h) => hasWebDav(h) && matches(h));
+  const s3Hosts = all.filter((h) => hasS3(h) && matches(h));
   const sessions = Object.values(panes).filter(
     (p) => p.protocol === "ssh" && p.status === "connected",
   );
-  const pickHost = (h: HostCard, kind: "host" | "webdav") => {
+  const pickHost = (h: HostCard, kind: "host" | "webdav" | "s3") => {
     if (kind === "host") openSftpForHost(h.id, h.label, h.vaultId, side);
+    else if (kind === "s3") openS3ForHost(h.id, h.label, h.vaultId, side);
     else openWebDavForHost(h.id, h.label, h.vaultId, side);
   };
   const pickSession = (id: Uuid, title: string, hostId: Uuid | null) => {
@@ -751,9 +755,18 @@ function HostPickerList({ side }: { side: PaneKey }) {
             <ListItemText primary={h.label} secondary={h.webdavUrl ?? h.address} />
           </ListItemButton>
         ))}
-        {sshHosts.length === 0 && davHosts.length === 0 && (
+        {s3Hosts.length > 0 && <ListSubheader disableSticky>{tr("S3")}</ListSubheader>}
+        {s3Hosts.map((h) => (
+          <ListItemButton key={`s3-${h.id}`} onClick={() => pickHost(h, "s3")}>
+            <Box sx={{ mr: 1.5 }}>
+              <HostAvatar host={h} size={28} />
+            </Box>
+            <ListItemText primary={h.label} secondary={h.s3Url ?? h.address} />
+          </ListItemButton>
+        ))}
+        {sshHosts.length === 0 && davHosts.length === 0 && s3Hosts.length === 0 && (
           <Typography variant="body2" color="text.disabled" sx={{ px: 3, py: 2 }}>
-            {tr("No SSH or WebDAV hosts saved yet.")}
+            {tr("No SSH, WebDAV or S3 hosts saved yet.")}
           </Typography>
         )}
       </List>

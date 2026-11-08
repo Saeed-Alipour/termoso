@@ -145,10 +145,18 @@ class SftpManager(
         val wanted = protocol ?: defaultProtocol(host)
         val bridge = SftpBridge()
         val rust = repo.read {
-            if (wanted == FileProtocol.WEBDAV) webdavHost(hostId, vaultId, bridge) else sftpHost(hostId, vaultId, bridge)
+            when (wanted) {
+                FileProtocol.WEBDAV -> webdavHost(hostId, vaultId, bridge)
+                FileProtocol.S3 -> s3Host(hostId, vaultId, bridge)
+                else -> sftpHost(hostId, vaultId, bridge)
+            }
         }
         val user = host.username.takeIf { it.isNotBlank() }?.let { "$it@" } ?: ""
-        val target = if (wanted == FileProtocol.WEBDAV) host.webdavUrl ?: host.address else "$user${host.address}:${host.port}"
+        val target = when (wanted) {
+            FileProtocol.WEBDAV -> host.webdavUrl ?: host.address
+            FileProtocol.S3 -> host.s3Url ?: host.address
+            else -> "$user${host.address}:${host.port}"
+        }
         return register(
             SftpConnection(
                 id = rust.id(),
@@ -274,10 +282,14 @@ class SftpManager(
     companion object {
         /** SFTP whenever the host has an SSH section; WebDAV only when that is all it has. */
         fun defaultProtocol(host: HostItem): FileProtocol =
-            if (host.protocol.equals("webdav", true)) FileProtocol.WEBDAV else FileProtocol.SFTP
+            when {
+                host.protocol.equals("webdav", true) -> FileProtocol.WEBDAV
+                host.protocol.equals("s3", true) -> FileProtocol.S3
+                else -> FileProtocol.SFTP
+            }
 
         /** Whether [host] can be browsed at all (SSH → SFTP, or a WebDAV section). */
-        fun hasFiles(host: HostItem): Boolean = host.protocol.equals("ssh", true) || host.webdavUrl != null
+        fun hasFiles(host: HostItem): Boolean = host.protocol.equals("ssh", true) || host.webdavUrl != null || host.s3Url != null
     }
 
     suspend fun closeAll() {

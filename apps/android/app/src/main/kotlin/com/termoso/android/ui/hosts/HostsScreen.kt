@@ -124,6 +124,7 @@ fun HostsScreen(
     onConnectWith: (String, Transport) -> Unit,
     onSftp: (String) -> Unit,
     onWebdav: (String) -> Unit,
+    onS3: (String) -> Unit = {},
     onOpenSftp: (String) -> Unit,
     onOpenTerminal: () -> Unit,
     onForward: (String) -> Unit,
@@ -170,6 +171,11 @@ fun HostsScreen(
                         val id = state.selected.first()
                         vm.clearSelection()
                         onWebdav(id)
+                    },
+                    onS3 = {
+                        val id = state.selected.first()
+                        vm.clearSelection()
+                        onS3(id)
                     },
                     onConnectWith = { transport ->
                         val id = state.selected.first()
@@ -321,6 +327,7 @@ fun HostsScreen(
             onConnect = { transport -> if (transport == Transport.AUTO) onConnect(d.host.id) else onConnectWith(d.host.id, transport) },
             onSftp = { onSftp(d.host.id) },
             onWebdav = { onWebdav(d.host.id) },
+            onS3 = { onS3(d.host.id) },
             onOpenSftp = onOpenSftp,
             onOpenTerminal = onOpenTerminal,
             onForward = { onForward(d.host.id) },
@@ -559,6 +566,7 @@ private fun SelectionBar(
     onEdit: () -> Unit,
     onSftp: () -> Unit,
     onWebdav: () -> Unit,
+    onS3: () -> Unit = {},
     onConnectWith: (Transport) -> Unit,
     onForward: () -> Unit,
     onDuplicate: () -> Unit,
@@ -571,6 +579,7 @@ private fun SelectionBar(
     val singleSsh = single?.protocol.equals("ssh", ignoreCase = true)
     val singleTelnet = singleSsh && single?.telnetPort != null
     val singleWebdav = single?.webdavUrl != null
+    val singleS3 = single?.s3Url != null
     TopAppBar(
         title = { Text(stringResource(R.string.selected_2, state.selected.size)) },
         navigationIcon = {
@@ -584,6 +593,9 @@ private fun SelectionBar(
                 }
                 if (singleWebdav) {
                     IconButton(onClick = onWebdav) { Icon(Icons.Filled.CloudQueue, contentDescription = stringResource(R.string.webdav_files)) }
+                }
+                if (singleS3) {
+                    IconButton(onClick = onS3) { Icon(Icons.Filled.CloudQueue, contentDescription = stringResource(R.string.s3_files)) }
                 }
             }
             IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.remove_2)) }

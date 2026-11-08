@@ -56,6 +56,7 @@ import {
 } from "@/ipc/hooks";
 import {
   emptyHostForm,
+  emptyS3Form,
   emptyWebDavForm,
   errorMessage,
   type ConnectProtocol,
@@ -64,6 +65,7 @@ import {
   type IpVersion,
   type TelnetForm,
   type Uuid,
+  type S3Form,
   type WebDavForm,
 } from "@/ipc/types";
 import * as ipc from "@/ipc/commands";
@@ -92,6 +94,7 @@ const emptyTelnet = (): TelnetForm => ({
 });
 
 const emptyWebDav = emptyWebDavForm;
+const emptyS3 = emptyS3Form;
 
 /** TCP port text: empty (default) or 1–65535. */
 const isPortText = (raw: string) => {
@@ -101,6 +104,10 @@ const isPortText = (raw: string) => {
 };
 
 /** A DNS name for SNI: labels of letters, digits and hyphens. */
+/** S3 bucket: 3-63 chars of lowercase letters, digits, dots and hyphens, starting and ending with a letter or digit. */
+const isBucketName = (raw: string) =>
+  /^[a-z0-9](?:[a-z0-9.-]{1,61}[a-z0-9])?$/.test(raw.trim()) && raw.trim().length >= 3;
+
 const isServerName = (raw: string) => {
   const t = raw.trim().toLowerCase();
   return (
@@ -170,7 +177,17 @@ const protocolsOf = (f: HostForm): ConnectProtocol[] => [
 
 /** What the bottom Connect opens: Mosh when enabled, else the first section; Files for WebDAV-only. */
 const primaryOf = (f: HostForm): ConnectTarget | null =>
-  f.ssh ? (f.useMosh ? "mosh" : "ssh") : f.telnet ? "telnet" : f.webdav ? "webdav" : null;
+  f.ssh
+    ? f.useMosh
+      ? "mosh"
+      : "ssh"
+    : f.telnet
+      ? "telnet"
+      : f.webdav
+        ? "webdav"
+        : f.s3
+          ? "s3"
+          : null;
 
 /** Terminal sections need an address; a WebDAV-only host carries its own URL. */
 
@@ -267,6 +284,10 @@ function HostEditor({
     markEdited();
     setForm((f) => ({ ...f, webdav: { ...(f.webdav ?? emptyWebDav()), ...p } }));
   };
+  const patchS3 = (p: Partial<S3Form>) => {
+    markEdited();
+    setForm((f) => ({ ...f, s3: { ...(f.s3 ?? emptyS3()), ...p } }));
+  };
 
   const readOnly = useActiveVault().readOnly;
   const protocols = protocolsOf(form);
@@ -279,8 +300,17 @@ function HostEditor({
       (form.webdav.certificateFingerprint === null ||
         form.webdav.certificateFingerprint.trim() === "" ||
         isFingerprint(form.webdav.certificateFingerprint)));
-  const hasSection = protocols.length > 0 || form.webdav !== null;
-  const canSave = addressOk && webdavOk && hasSection && !save.isPending && !readOnly;
+  const s3Ok =
+    form.s3 === null ||
+    (isBucketName(form.s3.bucket) &&
+      isPortText(form.s3.port === null ? "" : String(form.s3.port)) &&
+      (form.s3.tlsServerName === null || isServerName(form.s3.tlsServerName)) &&
+      (form.s3.caCertificate === null || isPemBundle(form.s3.caCertificate)) &&
+      (form.s3.certificateFingerprint === null ||
+        form.s3.certificateFingerprint.trim() === "" ||
+        isFingerprint(form.s3.certificateFingerprint)));
+  const hasSection = protocols.length > 0 || form.webdav !== null || form.s3 !== null;
+  const canSave = addressOk && webdavOk && s3Ok && hasSection && !save.isPending && !readOnly;
   const sshPortPlaceholder = String(inh?.port ?? 22);
   const chainName = (id: Uuid | null) =>
     (chains.data ?? []).find((c) => c.id === id)?.data.label ?? null;
@@ -289,7 +319,13 @@ function HostEditor({
     return p ? `${p.data.kind.toUpperCase()} ${p.data.host}:${p.data.port}` : null;
   };
   const icon = pickedIcon(form.icon) ?? distroIcon(form.osName);
-  const glyphProtocol: HostProtocol = form.ssh ? "ssh" : form.telnet ? "telnet" : "webdav";
+  const glyphProtocol: HostProtocol = form.ssh
+    ? "ssh"
+    : form.telnet
+      ? "telnet"
+      : form.webdav
+        ? "webdav"
+        : "s3";
   const selectedTags = (tags.data ?? []).filter((t) => form.tagIds.includes(t.id));
   const selectedTagIds = new Set(form.tagIds);
 
@@ -651,7 +687,7 @@ function HostEditor({
                 />
               }
               action={
-                (form.telnet !== null || form.webdav !== null) && (
+                (form.telnet !== null || form.webdav !== null || form.s3 !== null) && (
                   <Tooltip title={tr("Remove SSH")}>
                     <IconButton
                       size="small"
@@ -1125,6 +1161,210 @@ function HostEditor({
               label={tr("Add WebDAV")}
               onClick={() => set("webdav", emptyWebDav())}
             />
+          )}
+          {form.s3 ? (
+            <SectionCard
+              title="S3"
+              action={
+                <Tooltip title={tr("Remove S3")}>
+                  <IconButton
+                    size="small"
+                    aria-label={tr("Remove S3")}
+                    onClick={() => set("s3", null)}
+                  >
+                    <CloseRoundedIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              }
+            >
+              <Stack direction="row" spacing={1.5}>
+                <Field label={tr("Bucket")} sx={{ flex: 1 }}>
+                  <TextField
+                    value={form.s3.bucket}
+                    onChange={(e) => patchS3({ bucket: e.target.value })}
+                    placeholder="my-bucket"
+                    error={touched && !isBucketName(form.s3.bucket)}
+                    slotProps={{ input: { sx: { fontFamily: monoFontFamily } } }}
+                  />
+                </Field>
+                <Field label={tr("Port")} sx={{ width: 120 }}>
+                  <TextField
+                    value={form.s3.port ?? ""}
+                    onChange={(e) => {
+                      const t = e.target.value.replace(/\D/g, "");
+                      patchS3({ port: t === "" ? null : Number(t) });
+                    }}
+                    placeholder={form.s3.http ? "80" : "443"}
+                    slotProps={{ input: { sx: { fontFamily: monoFontFamily } } }}
+                  />
+                </Field>
+              </Stack>
+              <Stack direction="row" spacing={1.5}>
+                <Field
+                  label={tr("Region")}
+                  sx={{ width: 180 }}
+                  hint={tr(
+                    "Signing region; empty means us-east-1 (MinIO, RustFS). Cloudflare R2 takes auto.",
+                  )}
+                >
+                  <TextField
+                    value={form.s3.region}
+                    onChange={(e) => patchS3({ region: e.target.value })}
+                    placeholder="us-east-1"
+                    slotProps={{ input: { sx: { fontFamily: monoFontFamily } } }}
+                  />
+                </Field>
+                <Field
+                  label={tr("Key prefix")}
+                  sx={{ flex: 1 }}
+                  hint={tr(
+                    "Folder inside the bucket opened as the root; empty opens the whole bucket.",
+                  )}
+                >
+                  <TextField
+                    value={form.s3.prefix}
+                    onChange={(e) => patchS3({ prefix: e.target.value })}
+                    placeholder="backups/2026"
+                    slotProps={{ input: { sx: { fontFamily: monoFontFamily } } }}
+                  />
+                </Field>
+              </Stack>
+              <Field
+                label={tr("API path")}
+                hint={tr(
+                  "Only when the S3 API is mounted below a path on the host (reverse proxy). The endpoint itself is the address above.",
+                )}
+              >
+                <TextField
+                  value={form.s3.path}
+                  onChange={(e) => patchS3({ path: e.target.value })}
+                  placeholder="/"
+                  slotProps={{ input: { sx: { fontFamily: monoFontFamily } } }}
+                />
+              </Field>
+              <FormControlLabel
+                sx={{ ml: 0, mr: 0, alignSelf: "flex-start" }}
+                control={
+                  <Switch
+                    size="small"
+                    checked={form.s3.virtualHost}
+                    onChange={(e) => patchS3({ virtualHost: e.target.checked })}
+                    sx={{ mr: 0.5 }}
+                  />
+                }
+                label={tr(
+                  "Bucket in the host name (bucket.host, the AWS default; off for MinIO and RustFS)",
+                )}
+              />
+              {proxyField}
+              <Divider />
+              <Stack direction="row" spacing={1.5}>
+                <Field label={tr("Access key ID")} sx={{ flex: 1 }}>
+                  <TextField
+                    value={form.s3.accessKey}
+                    onChange={(e) => patchS3({ accessKey: e.target.value })}
+                    slotProps={{ input: { sx: { fontFamily: monoFontFamily } } }}
+                  />
+                </Field>
+                <Field label={tr("Secret access key")} sx={{ flex: 1 }}>
+                  <TextField
+                    type="password"
+                    value={form.s3.secretKey ?? ""}
+                    onChange={(e) => patchS3({ secretKey: e.target.value })}
+                    placeholder={
+                      form.s3.hasSecretKey && form.s3.secretKey === null ? "••••••••" : ""
+                    }
+                    slotProps={{ input: { sx: { fontFamily: monoFontFamily } } }}
+                  />
+                </Field>
+              </Stack>
+              <Typography variant="caption" color="text.secondary">
+                {tr(
+                  "Keys stay in the vault. S3 has no folders, permissions or owners: folders are key prefixes, rename copies and deletes.",
+                )}
+              </Typography>
+              <Divider />
+              <Typography variant="subtitle2">{tr("Security")}</Typography>
+              <FormControlLabel
+                sx={{ ml: 0, mr: 0, alignSelf: "flex-start" }}
+                control={
+                  <Switch
+                    size="small"
+                    checked={form.s3.http}
+                    onChange={(e) => patchS3({ http: e.target.checked })}
+                    sx={{ mr: 0.5 }}
+                  />
+                }
+                label={tr("Plain HTTP (no TLS)")}
+              />
+              {!form.s3.http && (
+                <>
+                  <Field
+                    label={tr("Server name (SNI)")}
+                    hint={tr(
+                      "Only when the certificate is issued to a different name than the address — a share behind a reverse proxy reached by IP, or a name that is not in DNS. Sent as SNI and Host and checked against the certificate.",
+                    )}
+                  >
+                    <TextField
+                      value={form.s3.tlsServerName ?? ""}
+                      onChange={(e) => patchS3({ tlsServerName: e.target.value.trim() || null })}
+                      placeholder={form.address.trim() || "s3.internal"}
+                      error={
+                        touched &&
+                        form.s3.tlsServerName !== null &&
+                        !isServerName(form.s3.tlsServerName)
+                      }
+                      slotProps={{ input: { sx: { fontFamily: monoFontFamily } } }}
+                    />
+                  </Field>
+                  <Field
+                    label={tr("Certificate authority (PEM)")}
+                    hint={tr(
+                      "Your own CA that signed the server certificate, instead of the system trust store. Several certificates may follow one another.",
+                    )}
+                  >
+                    <TextField
+                      multiline
+                      minRows={3}
+                      maxRows={8}
+                      value={form.s3.caCertificate ?? ""}
+                      onChange={(e) => patchS3({ caCertificate: e.target.value.trim() || null })}
+                      placeholder="-----BEGIN CERTIFICATE-----"
+                      error={
+                        touched &&
+                        form.s3.caCertificate !== null &&
+                        !isPemBundle(form.s3.caCertificate)
+                      }
+                      slotProps={{
+                        input: { sx: { fontFamily: monoFontFamily, fontSize: 12 } },
+                      }}
+                    />
+                  </Field>
+                  <Field
+                    label={tr("Server certificate fingerprint")}
+                    hint={tr(
+                      "Alternatively pin exactly one server certificate by its SHA-256; a pin takes precedence over the CA. Left empty with no CA, the system trust store decides and an unknown certificate is offered on first connect.",
+                    )}
+                  >
+                    <TextField
+                      value={form.s3.certificateFingerprint ?? ""}
+                      onChange={(e) =>
+                        patchS3({ certificateFingerprint: e.target.value.trim() || null })
+                      }
+                      placeholder="sha256:…"
+                      error={
+                        touched &&
+                        form.s3.certificateFingerprint !== null &&
+                        !isFingerprint(form.s3.certificateFingerprint)
+                      }
+                      slotProps={{ input: { sx: { fontFamily: monoFontFamily } } }}
+                    />
+                  </Field>
+                </>
+              )}
+            </SectionCard>
+          ) : (
+            <AddSectionButton label={tr("Add S3")} onClick={() => set("s3", emptyS3())} />
           )}
           {id !== null && !readOnly && <LocalCopiesSection hostId={id} />}
         </Box>

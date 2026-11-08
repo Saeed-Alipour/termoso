@@ -23,6 +23,7 @@ import com.termoso.core.SnippetItem
 import com.termoso.core.TagItem
 import com.termoso.core.TelnetDraft
 import com.termoso.core.VaultInfo
+import com.termoso.core.S3Draft
 import com.termoso.core.WebDavDraft
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -55,6 +56,24 @@ fun emptyWebDavDraft() = WebDavDraft(
     clientCertificate = null,
     clientKey = null,
     clientCertificateFingerprint = null,
+)
+
+/** A blank S3 section for "+ Add S3". */
+fun emptyS3Draft() = S3Draft(
+    bucket = "",
+    region = "",
+    port = null,
+    path = "",
+    prefix = "",
+    http = false,
+    virtualHost = false,
+    tlsServerName = null,
+    caCertificate = null,
+    accessKey = "",
+    secretKey = null,
+    identityId = null,
+    certificateFingerprint = null,
+    hasSecretKey = false,
 )
 
 /**
@@ -326,6 +345,11 @@ class HostEditorViewModel(
         d.telnet?.let { d.copy(telnet = transform(it)) } ?: d
     }
 
+    /** Edit the S3 section; no-op while the host has none. */
+    fun updateS3(transform: (S3Draft) -> S3Draft) = update { d ->
+        d.s3?.let { d.copy(s3 = transform(it)) } ?: d
+    }
+
     /** Edit the WebDAV section; no-op while the host has none. */
     fun updateWebdav(transform: (WebDavDraft) -> WebDavDraft) {
         update { d -> d.webdav?.let { d.copy(webdav = transform(it)) } ?: d }
@@ -466,6 +490,18 @@ class HostEditorViewModel(
                         certificateFingerprint = it.certificateFingerprint?.trim()?.ifEmpty { null },
                         // A new certificate with an empty key field keeps the stored key (renewal).
                         clientKey = if (it.clientCertificateFingerprint != null) it.clientKey?.ifBlank { null } else it.clientKey,
+                    )
+                },
+                s3 = draft.s3?.let {
+                    it.copy(
+                        bucket = it.bucket.trim(),
+                        region = it.region.trim(),
+                        path = it.path.trim(),
+                        prefix = it.prefix.trim(),
+                        accessKey = it.accessKey.trim(),
+                        tlsServerName = it.tlsServerName?.trim()?.ifEmpty { null },
+                        caCertificate = it.caCertificate?.trim()?.ifEmpty { null },
+                        certificateFingerprint = it.certificateFingerprint?.trim()?.ifEmpty { null },
                     )
                 },
                 envVariables = draft.envVariables.filter { it.name.isNotBlank() },
