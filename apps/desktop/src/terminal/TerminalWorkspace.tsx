@@ -4,7 +4,8 @@ import TerminalRoundedIcon from "@mui/icons-material/TerminalRounded";
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import DnsRoundedIcon from "@mui/icons-material/DnsRounded";
 import { SplitView } from "./SplitView";
-import { StatusDot, TerminalPane } from "./TerminalPane";
+import { StatusDot } from "./TerminalPane";
+import { PaneSlot } from "./PaneHost";
 import { TerminalSidePanel } from "./TerminalSidePanel";
 import { closePane, focusPane, setActivePane, useTerminal } from "./store";
 import { HostAvatar } from "@/hosts/HostAvatar";
@@ -42,7 +43,7 @@ export function TerminalWorkspace({ tabId }: Props) {
         sx={{ position: "relative", flex: 1, minWidth: 0, minHeight: 0, display: "flex", p: 0.75 }}
       >
         {single ? (
-          <TerminalPane key={tab.activePaneId} paneId={tab.activePaneId} active showFrame={!list} />
+          <PaneSlot key={tab.activePaneId} paneId={tab.activePaneId} />
         ) : (
           <SplitView
             tabId={tabId}

@@ -78,7 +78,6 @@ import {
 } from "./layout";
 import { resolveTerminalTheme, toXtermTheme, type TerminalTheme } from "./themes";
 import { KeywordHighlighter } from "./highlight";
-import { markDocked } from "./dragState";
 import { leafState, type LeafState, restoreKeystrokes, withLeafState } from "./restore";
 import {
   RECONNECT_ATTEMPTS,
@@ -1993,7 +1992,6 @@ export function mergeInto(
     }
     return { ...st, tabs, activeTabId: dst.id };
   });
-  markDocked();
   requestAnimationFrame(() => {
     const merged = terminalStore.get().tabs.find((t) => t.id === dst.id);
     merged?.paneIds.forEach(fitPane);
@@ -2037,7 +2035,6 @@ export function movePaneToNewTab(paneId: Uuid, beforeId?: string | null): string
     }
     return fresh ? { ...st, tabs, activeTabId: fresh.id } : st;
   });
-  if (created) markDocked();
   if (created && beforeId !== undefined) moveTab(created, beforeId);
   requestAnimationFrame(() => fitPane(paneId));
   return created;

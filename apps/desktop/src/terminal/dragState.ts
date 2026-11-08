@@ -48,13 +48,6 @@ export function hideDockPreview() {
   );
 }
 
-let dockedAt = 0;
-/** A session was just docked or detached: its pane fades in. */
-export const markDocked = () => {
-  dockedAt = Date.now();
-};
-export const justDocked = () => Date.now() - dockedAt < 500;
-
 export type SessionDrag = { kind: "tab"; id: string } | { kind: "pane"; id: Uuid };
 
 export const dragStore = createStore<{ drag: SessionDrag | null }>({ drag: null });

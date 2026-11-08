@@ -1,15 +1,6 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import { createPortal } from "react-dom";
-import {
-  Box,
-  Button,
-  IconButton,
-  Stack,
-  Tooltip,
-  Typography,
-  alpha,
-  keyframes,
-} from "@mui/material";
+import { Box, Button, IconButton, Stack, Tooltip, Typography, alpha } from "@mui/material";
 import ReplayRoundedIcon from "@mui/icons-material/ReplayRounded";
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import ShieldRoundedIcon from "@mui/icons-material/ShieldRounded";
@@ -47,7 +38,6 @@ import { useSnackbar } from "@/components/Snackbar";
 import { MAX_SPLIT_PANES, nearestSide, type DropSide } from "./layout";
 import {
   hideDockPreview,
-  justDocked,
   setSessionDrag,
   showDockPreview,
   useDockPreview,
@@ -58,14 +48,18 @@ import { ZmodemBar } from "./ZmodemBar";
 
 interface Props {
   paneId: Uuid;
-  active: boolean;
-  showFrame: boolean;
 }
 
-export function TerminalPane({ paneId, active, showFrame }: Props) {
+/**
+ * One session's terminal. Rendered once per pane by `PaneLayer` and moved
+ * between layout slots, so docking or detaching never rebuilds it.
+ */
+export function TerminalPane({ paneId }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
-  // A pane that was just docked or detached eases in instead of popping.
-  const [fadeIn] = useState(justDocked);
+  const tab = useTerminal((s) => s.tabs.find((t) => t.paneIds.includes(paneId)));
+  const active = tab?.activePaneId === paneId;
+  // Panes of a split are framed (with a header); a list-mode pane stands alone.
+  const showFrame = tab !== undefined && tab.viewMode !== "list" && tab.paneIds.length > 1;
   const pane = useTerminal((s) => s.panes[paneId]);
   const queued = useTerminal((s) => s.reconnect?.paneIds.includes(paneId) ?? false);
   const theme = usePaneTheme(paneId);
@@ -110,7 +104,6 @@ export function TerminalPane({ paneId, active, showFrame }: Props) {
             : "0 0 0 1px var(--mui-palette-border-light)"
           : "none",
         transition: "box-shadow 120ms",
-        animation: fadeIn ? `${paneIn} 180ms cubic-bezier(0.2, 0.8, 0.2, 1)` : undefined,
       }}
     >
       {showFrame && <PaneHeader pane={pane} active={active} theme={theme} />}
@@ -169,11 +162,6 @@ export function TerminalPane({ paneId, active, showFrame }: Props) {
 }
 
 const PANE_MIME = "application/x-termoso-pane";
-
-const paneIn = keyframes`
-  from { opacity: 0.35; transform: scale(0.985); }
-  to { opacity: 1; transform: scale(1); }
-`;
 
 /**
  * While a tab or another pane is being dragged, covers this pane with drop

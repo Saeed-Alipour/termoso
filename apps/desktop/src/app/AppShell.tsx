@@ -15,6 +15,7 @@ import { PromptHost } from "@/prompts/PromptHost";
 import { TerminalWorkspace } from "@/terminal/TerminalWorkspace";
 import { TerminalOverlays } from "@/terminal/TerminalOverlays";
 import { DockPreviewLayer } from "@/terminal/TerminalPane";
+import { PaneLayer } from "@/terminal/PaneHost";
 import { dropAllTabs, startTerminalEvents, useTerminal } from "@/terminal/store";
 import { startMultiplayerEvents } from "@/terminal/multiplayer";
 import { startWorkspaces } from "@/terminal/workspaces";
@@ -213,6 +214,7 @@ function UnlockedShell() {
         </Box>
       </Box>
       <TerminalOverlays />
+      <PaneLayer />
       <DockPreviewLayer />
       <CommandPalette />
       <SettingsDialog />
