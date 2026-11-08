@@ -1,4 +1,4 @@
-import { Box, Divider, IconButton, Tooltip, Typography } from "@mui/material";
+import { Box, Divider, IconButton, Tooltip, Typography, alpha } from "@mui/material";
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import AddBoxRoundedIcon from "@mui/icons-material/AddBoxRounded";
@@ -18,10 +18,10 @@ import DriveFileRenameOutlineRoundedIcon from "@mui/icons-material/DriveFileRena
 import BookmarkAddedRoundedIcon from "@mui/icons-material/BookmarkAddedRounded";
 import ContentCopyRoundedIcon from "@mui/icons-material/ContentCopyRounded";
 import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
-import type { DragEvent, MouseEvent, ReactNode } from "react";
+import { Fragment, type DragEvent, type MouseEvent, type ReactNode } from "react";
 import type { HostCard, Uuid } from "@/ipc/types";
 import { PqBadge, StatusDot } from "@/terminal/TerminalPane";
-import { dragStore, setSessionDrag } from "@/terminal/dragState";
+import { dragStore, setSessionDrag, useSessionDrag } from "@/terminal/dragState";
 import { MAX_SPLIT_PANES } from "@/terminal/layout";
 import { MultiplayerTabButton } from "@/terminal/MultiplayerControl";
 import {
@@ -86,6 +86,41 @@ export function TopBar() {
   const sftpCount = useSftp((s) => s.order.length);
   const active = tabs.find((t) => t.id === activeTabId);
   const [dragging, setDragging] = useState<string | null>(null);
+  // A pane dragged out of a split is over free tab-strip space: preview its new tab there.
+  const sessionDrag = useSessionDrag();
+  /** Where the detached pane's tab would land: before this tab id (`null` = at the end). */
+  const [ghost, setGhost] = useState<{ beforeId: string | null } | null>(null);
+  const draggedPaneTitle = useTerminal((s) =>
+    sessionDrag?.kind === "pane" ? (s.panes[sessionDrag.id]?.title ?? null) : null,
+  );
+  useEffect(() => {
+    if (sessionDrag === null) setGhost(null);
+  }, [sessionDrag]);
+  const showGhost = sessionDrag?.kind === "pane" && ghost !== null;
+  const ghostTab = (
+    <Box
+      aria-hidden
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        alignSelf: "center",
+        height: 30,
+        px: 1.25,
+        mx: 0.25,
+        maxWidth: 220,
+        flexShrink: 0,
+        borderRadius: 1.5,
+        border: "1.5px dashed var(--mui-palette-primary-main)",
+        bgcolor: (t) => alpha(t.palette.primary.main, 0.14),
+        color: "text.primary",
+        pointerEvents: "none",
+      }}
+    >
+      <Typography variant="body2" noWrap sx={{ fontWeight: 500 }}>
+        {draggedPaneTitle ?? tr("New Tab")}
+      </Typography>
+    </Box>
+  );
   const [newWorkspaceOver, mountNewWorkspaceDrop] = useHostDropNewWorkspace();
   const vault = useActiveVault();
   const [vaultMenu, setVaultMenu] = useState<HTMLElement | null>(null);
@@ -158,8 +193,17 @@ export function TopBar() {
           if (dragStore.get().drag?.kind !== "pane") return;
           e.preventDefault();
           e.dataTransfer.dropEffect = "move";
+          // Over a tab, that tab reports the spot; free space means the end of the strip.
+          const onTab = e.target instanceof Element && e.target.closest('[role="tab"]') !== null;
+          if (!onTab) setGhost({ beforeId: null });
+        }}
+        onDragLeave={(e) => {
+          if (!(e.relatedTarget instanceof Node) || !e.currentTarget.contains(e.relatedTarget)) {
+            setGhost(null);
+          }
         }}
         onDrop={(e) => {
+          setGhost(null);
           const sd = dragStore.get().drag;
           if (e.defaultPrevented || sd?.kind !== "pane") return;
           e.preventDefault();
@@ -175,14 +219,18 @@ export function TopBar() {
         }}
       >
         {tabs.map((t) => (
-          <TerminalTopTab
-            key={t.id}
-            tab={t}
-            active={t.id === activeTabId}
-            dragging={dragging}
-            onDragState={setDragging}
-          />
+          <Fragment key={t.id}>
+            {showGhost && ghost.beforeId === t.id && ghostTab}
+            <TerminalTopTab
+              tab={t}
+              active={t.id === activeTabId}
+              dragging={dragging}
+              onDragState={setDragging}
+              onGhost={setGhost}
+            />
+          </Fragment>
         ))}
+        {showGhost && ghost.beforeId === null && ghostTab}
         {activeTabId === NEW_TAB && (
           <TopTab
             active
@@ -292,12 +340,15 @@ function TerminalTopTab({
   active,
   dragging,
   onDragState,
+  onGhost,
 }: {
   tab: TerminalTab;
   active: boolean;
   /** Id of the tab currently being dragged, if any. */
   dragging: string | null;
   onDragState: (id: string | null) => void;
+  /** A pane being dragged out would become a tab before `beforeId` (`null` = the end); `null` = nowhere. */
+  onGhost: (at: { beforeId: string | null } | null) => void;
 }) {
   const pane = useTerminal((s) => s.panes[tab.activePaneId]);
   const title = useTerminal((s) => tabTitle(tab, s));
@@ -414,6 +465,10 @@ function TerminalTopTab({
     const x = (e.clientX - r.left) / r.width;
     return x < 0.25 ? "before" : x > 0.75 ? "after" : "into";
   };
+  const nextTabId = () => {
+    const all = terminalStore.get().tabs;
+    return all[all.findIndex((t) => t.id === tab.id) + 1]?.id ?? null;
+  };
   const drag = {
     draggable: true,
     onDragStart: (e: DragEvent<HTMLElement>) => {
@@ -437,7 +492,14 @@ function TerminalTopTab({
       if (sd?.kind === "pane") {
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
-        setOver(zone(e));
+        const where = zone(e);
+        // Middle: docks into this tab (outlined). Edges: a ghost tab shows the new spot.
+        setOver(where === "into" ? "into" : null);
+        onGhost(
+          where === "into"
+            ? null
+            : { beforeId: where === "before" ? tab.id : (nextTabId() ?? null) },
+        );
         return;
       }
       if (!dragging || dragging === tab.id) return;
@@ -445,9 +507,13 @@ function TerminalTopTab({
       e.dataTransfer.dropEffect = "move";
       setOver(zone(e));
     },
-    onDragLeave: () => setOver(null),
+    onDragLeave: () => {
+      setOver(null);
+      onGhost(null);
+    },
     onDrop: (e: DragEvent<HTMLElement>) => {
       setOver(null);
+      onGhost(null);
       const dropped = droppedHostIds(e);
       if (dropped.length > 0) {
         e.preventDefault();
@@ -474,10 +540,6 @@ function TerminalTopTab({
             "A window holds up to {count} sessions",
           ),
         );
-      const nextTabId = () => {
-        const all = terminalStore.get().tabs;
-        return all[all.findIndex((t) => t.id === tab.id) + 1]?.id ?? null;
-      };
       const sd = dragStore.get().drag;
       if (sd?.kind === "pane") {
         // A pane dragged out of a split: dock it here, or make it a tab at this spot.
