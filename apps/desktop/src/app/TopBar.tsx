@@ -21,7 +21,7 @@ import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
 import { Fragment, type DragEvent, type MouseEvent, type ReactNode } from "react";
 import type { HostCard, Uuid } from "@/ipc/types";
 import { PqBadge, StatusDot } from "@/terminal/TerminalPane";
-import { dragStore, setSessionDrag, useSessionDrag } from "@/terminal/dragState";
+import { dragStore, setSessionDrag, useSessionDrag, type SessionDrag } from "@/terminal/dragState";
 import { MAX_SPLIT_PANES } from "@/terminal/layout";
 import { MultiplayerTabButton } from "@/terminal/MultiplayerControl";
 import {
@@ -89,13 +89,17 @@ export function TopBar() {
   // A pane dragged out of a split is over free tab-strip space: preview its new tab there.
   const sessionDrag = useSessionDrag();
   /** Where the detached pane's tab would land: before this tab id (`null` = at the end). */
-  const [ghost, setGhost] = useState<{ beforeId: string | null } | null>(null);
+  const [ghostAt, setGhostAt] = useState<{
+    beforeId: string | null;
+    drag: SessionDrag | null;
+  } | null>(null);
+  // Tied to the drag that set it, so a stale spot never shows in the next drag.
+  const setGhost = (at: { beforeId: string | null } | null) =>
+    setGhostAt(at && { ...at, drag: dragStore.get().drag });
+  const ghost = ghostAt?.drag === sessionDrag ? ghostAt : null;
   const draggedPaneTitle = useTerminal((s) =>
     sessionDrag?.kind === "pane" ? (s.panes[sessionDrag.id]?.title ?? null) : null,
   );
-  useEffect(() => {
-    if (sessionDrag === null) setGhost(null);
-  }, [sessionDrag]);
   const showGhost = sessionDrag?.kind === "pane" && ghost !== null;
   const ghostTab = (
     <Box
