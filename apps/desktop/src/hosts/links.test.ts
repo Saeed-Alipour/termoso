@@ -11,6 +11,8 @@ import {
   protocolLink,
   quickFromHistory,
   quickLabel,
+  quickHostForm,
+  savedHostFor,
 } from "./links";
 
 const ID = "3f2b7c9e-1d4a-4e8b-9c6f-0a1b2c3d4e5f";
@@ -304,5 +306,70 @@ describe("connect and sftp links (command line)", () => {
     const label = parseLink("termoso://connect?host=prod+web");
     if (label.kind !== "connect") throw new Error("connect");
     expect(connectQuickTarget(label)).toBeNull();
+  });
+});
+
+describe("parseQuickConnect command lines", () => {
+  const ssh = (address: string, username: string | null, port: number | null) => ({
+    kind: "quick",
+    address,
+    username,
+    port,
+    protocol: "ssh",
+  });
+  it("understands `ssh user@host`", () => {
+    expect(parseQuickConnect("ssh root@172.20.8.12")).toEqual(ssh("172.20.8.12", "root", null));
+  });
+  it("understands -p and -l", () => {
+    expect(parseQuickConnect("ssh -p 2222 root@10.0.0.1")).toEqual(ssh("10.0.0.1", "root", 2222));
+    expect(parseQuickConnect("ssh root@10.0.0.1 -p 2222")).toEqual(ssh("10.0.0.1", "root", 2222));
+    expect(parseQuickConnect("ssh -l bob example.com")).toEqual(ssh("example.com", "bob", null));
+  });
+  it("understands `telnet host port`", () => {
+    expect(parseQuickConnect("telnet 10.0.0.9 2323")).toEqual({
+      kind: "quick",
+      address: "10.0.0.9",
+      username: null,
+      port: 2323,
+      protocol: "telnet",
+    });
+  });
+  it("leaves unknown options and plain text alone", () => {
+    expect(parseQuickConnect("ssh -o StrictHostKeyChecking=no root@h")).toBeNull();
+  });
+});
+
+describe("quick connect and the host list", () => {
+  const typed = (text: string) => {
+    const t = parseQuickConnect(text);
+    if (!t) throw new Error(`not a target: ${text}`);
+    return t;
+  };
+  it("finds the saved host a typed target points at", () => {
+    const hosts = [
+      card({ id: "a", address: "172.20.8.12", username: "s.alipour" }),
+      card({ id: "b", address: "172.20.8.12", username: "root", port: 2222 }),
+    ];
+    expect(savedHostFor(typed("s.alipour@172.20.8.12"), hosts)?.id).toBe("a");
+    expect(savedHostFor(typed("172.20.8.12"), hosts)?.id).toBe("a");
+    expect(savedHostFor(typed("root@172.20.8.12:2222"), hosts)?.id).toBe("b");
+    // same address, other user or port: not the same host
+    expect(savedHostFor(typed("root@172.20.8.12"), hosts)).toBeUndefined();
+    expect(savedHostFor(typed("s.alipour@172.20.8.12:2200"), hosts)).toBeUndefined();
+  });
+  it("matches addresses case-insensitively", () => {
+    const hosts = [card({ id: "a", address: "Web1.Example.com" })];
+    expect(savedHostFor(typed("root@web1.example.com"), hosts)?.id).toBe("a");
+  });
+  it("builds a host entry for a typed SSH target only", () => {
+    expect(quickHostForm(typed("root@10.0.0.5"), ID, null)).toMatchObject({
+      label: "10.0.0.5",
+      address: "10.0.0.5",
+      username: "root",
+      port: null,
+      vaultId: ID,
+    });
+    expect(quickHostForm(typed("root@10.0.0.5:2222"), ID, null)).toMatchObject({ port: 2222 });
+    expect(quickHostForm(typed("telnet://10.0.0.9:2323"), ID, null)).toBeNull();
   });
 });

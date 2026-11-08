@@ -37,6 +37,7 @@ import { scopedTo } from "@/history/scope";
 import { useActiveVault } from "./vault";
 import { openTerminal } from "@/terminal/store";
 import { stepIndex } from "@/hosts/keyboardNav";
+import { useOpenQuick } from "@/hosts/useOpenQuick";
 import {
   createTemplate,
   deleteTemplate,
@@ -126,6 +127,7 @@ export function NewTabPage() {
   );
 
   const connect = (h: HostCard) => openHost(h);
+  const openQuick = useOpenQuick(vault.data?.id ?? null, vault.readOnly, hosts.data ?? []);
 
   // Result rows are the matches followed by the quick-connect row. Arrow keys
   // move `picked`; until then Enter keeps its old default (the only match, or
@@ -138,7 +140,7 @@ export function NewTabPage() {
   const activate = (i: number) => {
     const host = matches[i];
     if (host) connect(host);
-    else if (quick) openTerminal(quick);
+    else if (quick) openQuick(quick);
   };
   // Keep the arrow-selected row in view (only when the selection moves).
   useEffect(() => {
@@ -217,7 +219,7 @@ export function NewTabPage() {
                 {quick && (
                   <ListItemButton
                     selected={active === matches.length}
-                    onClick={() => openTerminal(quick)}
+                    onClick={() => openQuick(quick)}
                     sx={{ borderRadius: 1.5, gap: 1.25 }}
                   >
                     <IconTile size={sizes.tileSmall} tone="accent">
