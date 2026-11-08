@@ -310,10 +310,10 @@ export function HostsPage() {
       : all.filter((h) => h.groupId === groupId);
     if (q) {
       scoped = scoped.filter((h) =>
-        [h.label, h.address, h.username, hostTarget(h), ...h.tags, ...h.groupPath].some(
-          (s) =>
-            s.toLowerCase().includes(q) || (targetNeedle && s.toLowerCase().includes(targetNeedle)),
-        ),
+        [h.label, h.address, h.username, hostTarget(h), ...h.tags, ...h.groupPath].some((s) => {
+          const low = s.toLowerCase();
+          return low.includes(q) || (targetNeedle !== null && low.includes(targetNeedle));
+        }),
       );
     }
     if (tagFilter.length) scoped = scoped.filter((h) => tagFilter.every((t) => h.tags.includes(t)));

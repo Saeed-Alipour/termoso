@@ -1,4 +1,11 @@
-import { useMemo, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import {
   Box,
   Button,
@@ -133,6 +140,11 @@ export function NewTabPage() {
     if (i < matches.length) connect(matches[i]);
     else if (quick) openQuick(quick);
   };
+  // Keep the arrow-selected row in view (only when the selection moves).
+  useEffect(() => {
+    if (picked === null) return;
+    document.querySelector(`[data-row="${picked}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [picked]);
   const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Escape") {
       if (q) setQuery("");
@@ -194,9 +206,7 @@ export function NewTabPage() {
                   <ListItemButton
                     key={h.id}
                     selected={i === active}
-                    ref={(el) => {
-                      if (i === active) el?.scrollIntoView({ block: "nearest" });
-                    }}
+                    data-row={i}
                     onClick={() => connect(h)}
                     sx={{ borderRadius: 1.5, gap: 1.25 }}
                   >
