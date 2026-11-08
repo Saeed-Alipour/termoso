@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { insertBeside, leaf, leaves, nearestSide, removeLeaf, type SplitNode } from "./layout";
+import {
+  insertBeside,
+  leaf,
+  wrapRoot,
+  leaves,
+  nearestSide,
+  removeLeaf,
+  type SplitNode,
+} from "./layout";
 
 describe("insertBeside", () => {
   it("puts the piece after the target on the right / below", () => {
@@ -35,6 +43,19 @@ describe("insertBeside", () => {
   it("round-trips with removeLeaf", () => {
     const t = insertBeside(leaf("a"), "a", leaf("b"), "right", "s");
     expect(removeLeaf(t, "b")).toEqual(leaf("a"));
+  });
+});
+
+describe("wrapRoot", () => {
+  const two = insertBeside(leaf("a"), "a", leaf("b"), "right", "s1");
+  it("docks across the whole window, taking half of it", () => {
+    const t = wrapRoot(two, leaf("c"), "down", "s2");
+    expect(t).toMatchObject({ direction: "column", ratio: 0.5, second: leaf("c"), first: two });
+    expect(leaves(t)).toEqual(["a", "b", "c"]);
+  });
+  it("puts the piece first on the left / above", () => {
+    expect(leaves(wrapRoot(two, leaf("c"), "left", "s2"))).toEqual(["c", "a", "b"]);
+    expect(leaves(wrapRoot(two, leaf("c"), "up", "s2"))).toEqual(["c", "a", "b"]);
   });
 });
 

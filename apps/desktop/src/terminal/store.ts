@@ -69,6 +69,7 @@ import {
   removeLeaf,
   setRatio,
   splitLeaf,
+  wrapRoot,
   type DropSide,
   type Rect,
   type Side,
@@ -1935,6 +1936,7 @@ export function mergeInto(
   dstTabId: string,
   targetPaneId: Uuid,
   side: DropSide,
+  scope: "pane" | "window" = "pane",
 ): MergeResult {
   const s = terminalStore.get();
   const dst = s.tabs.find((t) => t.id === dstTabId);
@@ -1944,7 +1946,7 @@ export function mergeInto(
       : s.tabs.find((t) => t.paneIds.includes(source.id));
   if (!dst || !src || !dst.paneIds.includes(targetPaneId)) return "invalid";
   const moving = source.kind === "tab" ? src.paneIds : [source.id];
-  if (moving.includes(targetPaneId)) return "invalid";
+  if (scope === "pane" && moving.includes(targetPaneId)) return "invalid";
   if (source.kind === "tab" && src.id === dst.id) return "invalid";
   const incoming = src.id === dst.id ? 0 : moving.length;
   if (dst.paneIds.length + incoming > MAX_SPLIT_PANES) return "full";
@@ -1958,7 +1960,11 @@ export function mergeInto(
         let layout = t.layout;
         if (src.id === dst.id)
           layout = removeLeaf(layout, source.kind === "pane" ? source.id : "") ?? layout;
-        const merged = withLayout(t, insertBeside(layout, targetPaneId, piece, side, splitId));
+        const docked =
+          scope === "window"
+            ? wrapRoot(layout, piece, side, splitId)
+            : insertBeside(layout, targetPaneId, piece, side, splitId);
+        const merged = withLayout(t, docked);
         tabs.push({
           ...merged,
           viewMode: "split",

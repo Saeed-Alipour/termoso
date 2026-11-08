@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
+import { createPortal } from "react-dom";
 import { Box, Button, IconButton, Stack, Tooltip, Typography, alpha } from "@mui/material";
 import ReplayRoundedIcon from "@mui/icons-material/ReplayRounded";
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
@@ -163,35 +164,25 @@ function DockOverlay({ paneId }: { paneId: Uuid }) {
     return s.tabs.find((t) => t.id === drag.id)?.paneIds.length ?? 0;
   });
   const snackbar = useSnackbar();
-  const [side, setSide] = useState<DropSide | null>(null);
+  const [target, setTarget] = useState<DockTarget | null>(null);
   if (!drag || !tab) return null;
   if (drag.kind === "tab" && drag.id === tab.id) return null;
   if (drag.kind === "pane" && drag.id === paneId) return null;
   const sameTab = drag.kind === "pane" && tab.paneIds.includes(drag.id);
   const full = !sameTab && tab.paneIds.length + incoming > MAX_SPLIT_PANES;
-  const sideAt = (e: DragEvent<HTMLElement>) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    return nearestSide((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
-  };
-  const zone = {
-    left: { left: 0, top: 0, bottom: 0, width: "50%" },
-    right: { right: 0, top: 0, bottom: 0, width: "50%" },
-    up: { left: 0, right: 0, top: 0, height: "50%" },
-    down: { left: 0, right: 0, bottom: 0, height: "50%" },
-  } as const;
   return (
     <Box
       onDragOver={(e) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = full ? "none" : "move";
-        setSide(sideAt(e));
+        setTarget(dockTargetAt(e));
       }}
-      onDragLeave={() => setSide(null)}
+      onDragLeave={() => setTarget(null)}
       onDrop={(e) => {
         e.preventDefault();
-        const at = sideAt(e);
-        setSide(null);
-        const result = mergeInto(drag, tab.id, paneId, at);
+        const at = dockTargetAt(e);
+        setTarget(null);
+        const result = mergeInto(drag, tab.id, paneId, at.side, at.scope);
         if (result === "full") {
           snackbar.notify(
             trn(
@@ -204,21 +195,75 @@ function DockOverlay({ paneId }: { paneId: Uuid }) {
       }}
       sx={{ position: "absolute", inset: 0, zIndex: 30 }}
     >
-      {side && (
-        <Box
-          sx={{
-            position: "absolute",
-            ...zone[side],
-            borderRadius: 1.5,
-            pointerEvents: "none",
-            bgcolor: (t) => alpha(full ? t.palette.error.main : t.palette.primary.main, 0.22),
-            border: 2,
-            borderColor: full ? "error.main" : "primary.main",
-          }}
-        />
-      )}
+      {target &&
+        createPortal(
+          <Box
+            sx={{
+              position: "fixed",
+              ...target.rect,
+              zIndex: 1500,
+              borderRadius: 1.5,
+              pointerEvents: "none",
+              bgcolor: (t) => alpha(full ? t.palette.error.main : t.palette.primary.main, 0.22),
+              border: 2,
+              borderColor: full ? "error.main" : "primary.main",
+            }}
+          />,
+          document.body,
+        )}
     </Box>
   );
+}
+
+interface DockTarget {
+  side: DropSide;
+  /** `window`: along the whole window's edge; `pane`: beside this pane only. */
+  scope: "pane" | "window";
+  /** Viewport rectangle of the half that the docked session will take. */
+  rect: { left: number; top: number; width: number; height: number };
+}
+
+const EDGE_SLACK = 12;
+
+/**
+ * Where a drag over a pane would dock. When the nearest edge is also an edge of
+ * the window, the session docks along the whole window (and previews half of
+ * it); an edge shared with a neighbouring pane docks beside this pane only.
+ */
+function dockTargetAt(e: DragEvent<HTMLElement>): DockTarget {
+  const pane = e.currentTarget.getBoundingClientRect();
+  const side = nearestSide(
+    (e.clientX - pane.left) / pane.width,
+    (e.clientY - pane.top) / pane.height,
+  );
+  const rootEl = e.currentTarget.closest("[data-dock-root]");
+  let box = pane;
+  let scope: "pane" | "window" = "pane";
+  if (rootEl) {
+    const r = rootEl.getBoundingClientRect();
+    const pad = parseFloat(getComputedStyle(rootEl).paddingLeft) || 0;
+    const root = new DOMRect(r.left + pad, r.top + pad, r.width - 2 * pad, r.height - 2 * pad);
+    const onEdge =
+      (side === "left" && Math.abs(pane.left - root.left) <= EDGE_SLACK) ||
+      (side === "right" && Math.abs(pane.right - root.right) <= EDGE_SLACK) ||
+      (side === "up" && Math.abs(pane.top - root.top) <= EDGE_SLACK) ||
+      (side === "down" && Math.abs(pane.bottom - root.bottom) <= EDGE_SLACK);
+    if (onEdge) {
+      box = root;
+      scope = "window";
+    }
+  }
+  const w = box.width / 2;
+  const h = box.height / 2;
+  const rect =
+    side === "left"
+      ? { left: box.left, top: box.top, width: w, height: box.height }
+      : side === "right"
+        ? { left: box.left + w, top: box.top, width: w, height: box.height }
+        : side === "up"
+          ? { left: box.left, top: box.top, width: box.width, height: h }
+          : { left: box.left, top: box.top + h, width: box.width, height: h };
+  return { side, scope, rect };
 }
 
 /**

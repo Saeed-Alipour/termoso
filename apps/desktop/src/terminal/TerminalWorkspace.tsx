@@ -38,6 +38,7 @@ export function TerminalWorkspace({ tabId }: Props) {
     <Box sx={{ flex: 1, minHeight: 0, display: "flex" }}>
       {list && <SessionList paneIds={tab.paneIds} activePaneId={tab.activePaneId} />}
       <Box
+        data-dock-root
         sx={{ position: "relative", flex: 1, minWidth: 0, minHeight: 0, display: "flex", p: 0.75 }}
       >
         {single ? (
