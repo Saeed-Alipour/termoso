@@ -60,7 +60,6 @@ import {
 } from "./shellIntegration";
 import {
   MAX_PANES,
-  MAX_SPLIT_PANES,
   insertBeside,
   leaf,
   leaves,
@@ -1859,7 +1858,7 @@ export function splitActivePane(tabId: string, direction: SplitDirection) {
   const s = terminalStore.get();
   const tab = s.tabs.find((t) => t.id === tabId);
   const pane = tab ? s.panes[tab.activePaneId] : undefined;
-  if (!tab || !pane || tab.paneIds.length >= MAX_SPLIT_PANES) return;
+  if (!tab || !pane) return;
   openTerminal(pane.target, { intoTab: tabId, direction });
 }
 
@@ -1904,7 +1903,7 @@ export type MergeResult = "ok" | "full" | "invalid";
 /**
  * Drag-and-drop docking: put a whole tab (all its panes) or a single pane next
  * to `targetPaneId` in tab `dstTabId`, on the given side. A window holds up to
- * `MAX_SPLIT_PANES` sessions; the source tab disappears once it is empty.
+ * `MAX_PANES` sessions; the source tab disappears once it is empty.
  */
 export function mergeInto(
   source: MergeSource,
@@ -1924,7 +1923,7 @@ export function mergeInto(
   if (scope === "pane" && moving.includes(targetPaneId)) return "invalid";
   if (source.kind === "tab" && src.id === dst.id) return "invalid";
   const incoming = src.id === dst.id ? 0 : moving.length;
-  if (dst.paneIds.length + incoming > MAX_SPLIT_PANES) return "full";
+  if (dst.paneIds.length + incoming > MAX_PANES) return "full";
 
   const piece = source.kind === "tab" ? src.layout : leaf(source.id);
   const splitId = uuid();

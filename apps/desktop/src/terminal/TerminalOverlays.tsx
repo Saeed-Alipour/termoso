@@ -14,7 +14,7 @@ import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
 import SnoozeRoundedIcon from "@mui/icons-material/SnoozeRounded";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ActionMenu, type MenuAction } from "@/components/ui";
-import { MAX_SPLIT_PANES } from "./layout";
+import { MAX_PANES } from "./layout";
 import { LinkHoverHint, ReconnectSnackbar } from "./ReconnectSnackbar";
 import {
   clearBuffer,
@@ -59,7 +59,7 @@ export function TerminalOverlays() {
   const items: MenuAction[] = [];
   if (menu && tab) {
     const id = menu.paneId;
-    const full = tab.paneIds.length >= MAX_SPLIT_PANES;
+    const full = tab.paneIds.length >= MAX_PANES;
     items.push(
       {
         label: tr("Copy"),

@@ -35,7 +35,7 @@ import { dismissControlHint, useMultiplayer } from "./multiplayer";
 import type { TerminalTheme } from "./themes";
 import { tr, trn } from "@/i18n";
 import { useSnackbar } from "@/components/Snackbar";
-import { MAX_SPLIT_PANES, nearestSide, type DropSide } from "./layout";
+import { MAX_PANES, nearestSide, type DropSide } from "./layout";
 import {
   hideDockPreview,
   setSessionDrag,
@@ -180,7 +180,7 @@ function DockOverlay({ paneId }: { paneId: Uuid }) {
   if (drag.kind === "tab" && drag.id === tab.id) return null;
   if (drag.kind === "pane" && drag.id === paneId) return null;
   const sameTab = drag.kind === "pane" && tab.paneIds.includes(drag.id);
-  const full = !sameTab && tab.paneIds.length + incoming > MAX_SPLIT_PANES;
+  const full = !sameTab && tab.paneIds.length + incoming > MAX_PANES;
   return (
     <Box
       onDragOver={(e) => {
@@ -197,7 +197,7 @@ function DockOverlay({ paneId }: { paneId: Uuid }) {
         if (result === "full") {
           snackbar.notify(
             trn(
-              MAX_SPLIT_PANES,
+              MAX_PANES,
               "A window holds up to {count} session",
               "A window holds up to {count} sessions",
             ),

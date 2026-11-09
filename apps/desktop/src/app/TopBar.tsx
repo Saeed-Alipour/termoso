@@ -22,7 +22,7 @@ import { Fragment, type DragEvent, type MouseEvent, type ReactNode } from "react
 import type { HostCard, Uuid } from "@/ipc/types";
 import { PqBadge, StatusDot } from "@/terminal/TerminalPane";
 import { dragStore, setSessionDrag, useSessionDrag, type SessionDrag } from "@/terminal/dragState";
-import { MAX_SPLIT_PANES } from "@/terminal/layout";
+import { MAX_PANES } from "@/terminal/layout";
 import { MultiplayerTabButton } from "@/terminal/MultiplayerControl";
 import {
   HOME_TAB,
@@ -382,13 +382,11 @@ function TerminalTopTab({
     {
       label: tr("Split right"),
       icon: <VerticalSplitRoundedIcon fontSize="small" />,
-      disabled: tab.paneIds.length >= MAX_SPLIT_PANES,
       onClick: () => splitActivePane(tab.id, "row"),
     },
     {
       label: tr("Split down"),
       icon: <HorizontalSplitRoundedIcon fontSize="small" />,
-      disabled: tab.paneIds.length >= MAX_SPLIT_PANES,
       onClick: () => splitActivePane(tab.id, "column"),
     },
     {
@@ -470,11 +468,14 @@ function TerminalTopTab({
     setMenu({ left: e.clientX, top: e.clientY });
   };
 
-  /** Edges reorder (or place a detached pane); the middle docks into this tab's split. */
+  /**
+   * Dropping on a tab reorders as it always did: before or after, by which half. Holding
+   * Shift docks the dragged session into this tab's window instead.
+   */
   const zone = (e: DragEvent<HTMLElement>): "before" | "after" | "into" => {
+    if (e.shiftKey) return "into";
     const r = e.currentTarget.getBoundingClientRect();
-    const x = (e.clientX - r.left) / r.width;
-    return x < 0.25 ? "before" : x > 0.75 ? "after" : "into";
+    return e.clientX < r.left + r.width / 2 ? "before" : "after";
   };
   const nextTabId = () => {
     const all = terminalStore.get().tabs;
@@ -504,7 +505,7 @@ function TerminalTopTab({
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
         const where = zone(e);
-        // Middle: docks into this tab (outlined). Edges: a ghost tab shows the new spot.
+        // Shift: docks into this tab (outlined). Otherwise a ghost tab shows the new spot.
         setOver(where === "into" ? "into" : null);
         onGhost(
           where === "into"
@@ -546,7 +547,7 @@ function TerminalTopTab({
       const full = () =>
         snackbar.notify(
           trn(
-            MAX_SPLIT_PANES,
+            MAX_PANES,
             "A window holds up to {count} session",
             "A window holds up to {count} sessions",
           ),

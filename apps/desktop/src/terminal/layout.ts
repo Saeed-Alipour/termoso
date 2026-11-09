@@ -18,8 +18,6 @@ export type SplitNode =
     };
 
 export const MAX_PANES = 16;
-/** Sessions one window holds when splitting or dragging tabs together. */
-export const MAX_SPLIT_PANES = 4;
 export const MIN_RATIO = 0.1;
 
 export const leaf = (paneId: Uuid): SplitNode => ({ kind: "leaf", paneId });
