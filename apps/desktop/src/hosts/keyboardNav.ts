@@ -1,5 +1,16 @@
 import type { KeyboardEvent } from "react";
 
+/**
+ * Next highlighted row for ArrowDown (`step` 1) / ArrowUp (-1) in a list of
+ * `count` rows. Wraps around; with nothing highlighted (`active < 0`) Down picks
+ * the first row and Up the last.
+ */
+export function stepIndex(active: number, count: number, step: 1 | -1): number {
+  if (count <= 0) return -1;
+  if (active < 0) return step > 0 ? 0 : count - 1;
+  return (active + step + count) % count;
+}
+
 /** Marks a focusable host/group item; arrow keys move between items in document order. */
 export const HOST_ITEM_ATTR = "data-host-item";
 
