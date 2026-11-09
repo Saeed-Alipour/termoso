@@ -1730,6 +1730,13 @@ async fn ssh_connect<R: Runtime>(
                     }
                     Some(PromptAnswer::Identity { id, remember }) => {
                         let login = identity_login(&state, id).await?;
+                        // The picker only offers the host's own vault; refuse anything else
+                        // (and any quick connection) so a cross-vault reference never forms.
+                        if resolved.is_none_or(|r| r.host.vault_id != login.identity.vault_id) {
+                            return Err(DesktopError::invalid(
+                                "that identity belongs to a different vault than the host",
+                            ));
+                        }
                         if !login.identity.data.username.trim().is_empty() {
                             target.username = login.identity.data.username.clone();
                             display = target.display();

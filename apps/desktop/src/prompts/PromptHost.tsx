@@ -15,7 +15,7 @@ import {
   Typography,
 } from "@mui/material";
 import type { HostKeyInfo, PromptAnswer, PromptEvent } from "@/ipc/types";
-import { useIdentities } from "@/ipc/hooks";
+import { useHosts, useIdentities } from "@/ipc/hooks";
 import { useTerminal } from "@/terminal/store";
 import { Field } from "@/components/ui";
 import { answerPrompt, usePrompts } from "./store";
@@ -397,9 +397,15 @@ function PasswordPrompt({
   const [value, setValue] = useState("");
   const [remember, setRemember] = useState(false);
   const [identityId, setIdentityId] = useState("");
-  const identities = useIdentities(null);
-  const savedHost = useTerminal((s) => (s.panes[prompt.session_id]?.hostId ?? null) !== null);
-  const list = identities.data ?? [];
+  // Only the host's own vault is offered, like the host editor: an identity from
+  // another vault must not end up referenced by this host. Quick connections have
+  // no vault, so they get no picker.
+  const hostId = useTerminal((s) => s.panes[prompt.session_id]?.hostId ?? null);
+  const hosts = useHosts(null);
+  const vaultId = hostId ? (hosts.data?.find((h) => h.id === hostId)?.vaultId ?? null) : null;
+  const identities = useIdentities(vaultId);
+  const list = vaultId ? (identities.data ?? []) : [];
+  const savedHost = vaultId !== null;
   const chosen = list.some((i) => i.id === identityId);
   const cancel = () => onAnswer({ kind: "cancel" });
   const submit = () =>
