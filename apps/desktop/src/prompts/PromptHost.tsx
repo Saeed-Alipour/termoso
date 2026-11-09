@@ -58,7 +58,8 @@ export const PROMPT_CANCEL_ATTR = "data-prompt-cancel";
 /**
  * Keyboard movement for a prompt's buttons: ←/→ step through Reject · Connect
  * once · Trust & connect, ↓ drops to Cancel and ↑ goes back. Enter/Space then
- * press whichever is focused; the primary button is focused when the prompt opens.
+ * press whichever is focused; a prompt can mark its safe default button with
+ * `data-prompt-default`, which is where ↑ from Cancel lands.
  */
 function useArrowNav() {
   useEffect(() => {
@@ -80,9 +81,10 @@ function useArrowNav() {
       } else if (row && e.key === "ArrowDown") {
         next = document.querySelector<HTMLElement>(`[${PROMPT_CANCEL_ATTR}]`) ?? undefined;
       } else if (onCancel && e.key === "ArrowUp") {
-        const last = document.querySelector<HTMLElement>(`[${PROMPT_ACTIONS_ATTR}]`);
+        const row = document.querySelector<HTMLElement>(`[${PROMPT_ACTIONS_ATTR}]`);
         next =
-          last?.querySelector<HTMLElement>("button.MuiButton-contained:not(:disabled)") ??
+          row?.querySelector<HTMLElement>("[data-prompt-default]:not(:disabled)") ??
+          row?.querySelector<HTMLElement>("button.MuiButton-contained:not(:disabled)") ??
           undefined;
       } else {
         return;
@@ -335,15 +337,19 @@ function HostKeyPrompt({
             {tr("Reject")}
           </Button>
           <Box sx={{ flex: 1 }} />
-          <Button color={changed ? "error" : "primary"} onClick={() => decide("accept_once")}>
+          <Button
+            color={changed ? "error" : "primary"}
+            // Enter connects without saving: pinning a fingerprint stays an explicit
+            // click on "Trust & connect". A changed key (possible MITM) has no default.
+            autoFocus={!changed}
+            data-prompt-default=""
+            onClick={() => decide("accept_once")}
+          >
             {tr("Connect once")}
           </Button>
           <Button
             variant="contained"
             color={changed ? "error" : "primary"}
-            // Enter trusts a first-time host. A changed key (possible MITM) is
-            // never the default: it needs the explicit "verified" tick first.
-            autoFocus={!changed}
             disabled={changed && !verified}
             onClick={() => decide("accept_and_save")}
           >
