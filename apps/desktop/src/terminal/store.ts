@@ -660,9 +660,10 @@ function createRuntime(paneId: Uuid): Runtime {
     }),
     term.onTitleChange((title) => {
       const pane = terminalStore.get().panes[paneId];
-      // Saved-host tabs keep the host's label (or its name); only local shells
-      // and quick connections follow the title the shell sets.
-      if (pane && !pane.hostId && title.trim()) patchPane(paneId, { title: title.trim() });
+      // Saved-host tabs keep the host's label (or its name) unless Settings → Terminal →
+      // Tab title is "Shell title"; local shells and quick connections always follow it.
+      const followShell = !pane?.hostId || currentSettings?.tabTitle === "shell";
+      if (pane && followShell && title.trim()) patchPane(paneId, { title: title.trim() });
     }),
     term.onSelectionChange(() => {
       if (currentSettings?.copyOnSelect && term.hasSelection()) {
