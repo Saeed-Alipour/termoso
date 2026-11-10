@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   Alert,
   Box,
@@ -50,6 +50,53 @@ export function InlinePrompt({ prompt }: { prompt: PromptEvent }) {
 }
 
 /** Dialog chrome or (inline) a plain card: title, body, action row. */
+/** Marks the row of answer buttons; arrows move between them (see `useArrowNav`). */
+export const PROMPT_ACTIONS_ATTR = "data-prompt-actions";
+/** Marks the connection view's Cancel button, one arrow-down below the answers. */
+export const PROMPT_CANCEL_ATTR = "data-prompt-cancel";
+
+/**
+ * Keyboard movement for a prompt's buttons: ←/→ step through Reject · Connect
+ * once · Trust & connect, ↓ drops to Cancel and ↑ goes back. Enter/Space then
+ * press whichever is focused; a prompt can mark its safe default button with
+ * `data-prompt-default`, which is where ↑ from Cancel lands.
+ */
+function useArrowNav() {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+      const el = document.activeElement;
+      if (!(el instanceof HTMLElement)) return;
+      const row = el.closest<HTMLElement>(`[${PROMPT_ACTIONS_ATTR}]`);
+      const onCancel = el.hasAttribute(PROMPT_CANCEL_ATTR);
+      if (!row && !onCancel) return;
+      const buttons = row
+        ? Array.from(row.querySelectorAll<HTMLElement>("button:not(:disabled)"))
+        : [];
+      const i = buttons.indexOf(el);
+      let next: HTMLElement | undefined;
+      if (row && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+        const step = e.key === "ArrowRight" ? 1 : -1;
+        next = buttons[Math.min(buttons.length - 1, Math.max(0, i + step))];
+      } else if (row && e.key === "ArrowDown") {
+        next = document.querySelector<HTMLElement>(`[${PROMPT_CANCEL_ATTR}]`) ?? undefined;
+      } else if (onCancel && e.key === "ArrowUp") {
+        const row = document.querySelector<HTMLElement>(`[${PROMPT_ACTIONS_ATTR}]`);
+        next =
+          row?.querySelector<HTMLElement>("[data-prompt-default]:not(:disabled)") ??
+          row?.querySelector<HTMLElement>("button.MuiButton-contained:not(:disabled)") ??
+          undefined;
+      } else {
+        return;
+      }
+      e.preventDefault();
+      next?.focus();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+}
+
 function PromptFrame({
   inline,
   title,
@@ -65,6 +112,7 @@ function PromptFrame({
   actions: ReactNode;
   children: ReactNode;
 }) {
+  useArrowNav();
   if (inline) {
     return (
       <Stack
@@ -81,7 +129,12 @@ function PromptFrame({
           {title}
         </Typography>
         {children}
-        <Stack direction="row" spacing={1} sx={{ alignItems: "center", pt: 0.5 }}>
+        <Stack
+          direction="row"
+          spacing={1}
+          {...{ [PROMPT_ACTIONS_ATTR]: "" }}
+          sx={{ alignItems: "center", pt: 0.5 }}
+        >
           {actions}
         </Stack>
       </Stack>
@@ -91,7 +144,9 @@ function PromptFrame({
     <Dialog open onClose={onClose} maxWidth={maxWidth} fullWidth>
       <DialogTitle>{title}</DialogTitle>
       <DialogContent>{children}</DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2 }}>{actions}</DialogActions>
+      <DialogActions {...{ [PROMPT_ACTIONS_ATTR]: "" }} sx={{ px: 3, pb: 2 }}>
+        {actions}
+      </DialogActions>
     </Dialog>
   );
 }
@@ -282,7 +337,14 @@ function HostKeyPrompt({
             {tr("Reject")}
           </Button>
           <Box sx={{ flex: 1 }} />
-          <Button color={changed ? "error" : "primary"} onClick={() => decide("accept_once")}>
+          <Button
+            color={changed ? "error" : "primary"}
+            // Enter connects without saving: pinning a fingerprint stays an explicit
+            // click on "Trust & connect". A changed key (possible MITM) has no default.
+            autoFocus={!changed}
+            data-prompt-default=""
+            onClick={() => decide("accept_once")}
+          >
             {tr("Connect once")}
           </Button>
           <Button
