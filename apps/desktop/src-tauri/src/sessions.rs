@@ -1533,16 +1533,20 @@ async fn ssh_connect<R: Runtime>(
     }
 
     let known_hosts = KnownHosts::new(state.store()?.clone(), state.store()?.local_vault()?.id);
-    let display = target.display();
+    let mut display = target.display();
     let ssh_cfg = resolved.map(|r| r.ssh.clone()).unwrap_or_default();
-    let identity = resolved.and_then(|r| r.identity.clone());
+    let mut identity = resolved.and_then(|r| r.identity.clone());
+    let mut key = resolved.and_then(|r| r.key.clone());
+    let mut certificate = resolved.and_then(|r| r.certificate.clone());
+    // Identity picked in the password prompt; becomes the host's once the login works.
+    let mut remember_identity: Option<Uuid> = None;
     let mut password: Option<Zeroizing<String>> = identity
         .as_ref()
         .and_then(|i| i.data.password.clone())
         .filter(|p| !p.is_empty())
         .map(Zeroizing::new);
-    let mut passphrase: Option<Zeroizing<String>> = resolved
-        .and_then(|r| r.key.as_ref())
+    let mut passphrase: Option<Zeroizing<String>> = key
+        .as_ref()
         .and_then(|k| k.data.passphrase.clone())
         .filter(|p| !p.is_empty())
         .map(Zeroizing::new);
@@ -1556,7 +1560,7 @@ async fn ssh_connect<R: Runtime>(
     {
         passphrase = Some(termoso_core::extsecret::resolve(p).await?);
     }
-    let totp = identity
+    let mut totp = identity
         .as_ref()
         .and_then(|i| i.data.totp_secret.as_deref())
         .filter(|t| !t.is_empty())
@@ -1587,10 +1591,8 @@ async fn ssh_connect<R: Runtime>(
             )?);
         }
         let mut agent_key_selected = false;
-        if let Some(key) = resolved.and_then(|r| r.key.as_ref()) {
-            let certificate = resolved
-                .and_then(|r| r.certificate.as_ref())
-                .map(|c| c.data.certificate.clone());
+        if let Some(key) = key.as_ref() {
+            let certificate = certificate.as_ref().map(|c| c.data.certificate.clone());
             if key.data.is_agent_backed() {
                 let public_key = key.data.public_key.clone().ok_or_else(|| {
                     DesktopError::invalid(format!(
@@ -1694,7 +1696,12 @@ async fn ssh_connect<R: Runtime>(
             None => SshClient::connect(opts).await,
         };
         match result {
-            Ok(client) => return Ok((Arc::new(client), jumps)),
+            Ok(client) => {
+                if let (Some(id), Some(r)) = (remember_identity, resolved) {
+                    assign_identity(&state, r, id);
+                }
+                return Ok((Arc::new(client), jumps));
+            }
             Err(CoreError::AuthFailed { remaining })
                 if attempts < MAX_PASSWORD_ATTEMPTS
                     && remaining
@@ -1721,6 +1728,34 @@ async fn ssh_connect<R: Runtime>(
                         }
                         password = Some(value);
                     }
+                    Some(PromptAnswer::Identity { id, remember }) => {
+                        let login = identity_login(&state, id).await?;
+                        // The picker only offers the host's own vault; refuse anything else
+                        // (and any quick connection) so a cross-vault reference never forms.
+                        if resolved.is_none_or(|r| r.host.vault_id != login.identity.vault_id) {
+                            return Err(DesktopError::invalid(
+                                "that identity belongs to a different vault than the host",
+                            ));
+                        }
+                        if !login.identity.data.username.trim().is_empty() {
+                            target.username = login.identity.data.username.clone();
+                            display = target.display();
+                        }
+                        password = login.password;
+                        passphrase = login.passphrase;
+                        totp = login
+                            .identity
+                            .data
+                            .totp_secret
+                            .as_deref()
+                            .filter(|t| !t.is_empty())
+                            .map(|t| TotpResponder::parse(t).map_err(DesktopError::from))
+                            .transpose()?;
+                        key = login.key;
+                        certificate = login.certificate;
+                        remember_identity = remember.then_some(login.identity.id);
+                        identity = Some(login.identity);
+                    }
                     _ => return Err(CoreError::Cancelled.into()),
                 }
             }
@@ -1728,8 +1763,8 @@ async fn ssh_connect<R: Runtime>(
                 if attempts < MAX_PASSWORD_ATTEMPTS && msg.contains("passphrase") =>
             {
                 attempts += 1;
-                let label = resolved
-                    .and_then(|r| r.key.as_ref())
+                let label = key
+                    .as_ref()
                     .map(|k| k.data.label.clone())
                     .unwrap_or_default();
                 let answer = state
@@ -1743,7 +1778,7 @@ async fn ssh_connect<R: Runtime>(
                     .await;
                 match answer {
                     Some(PromptAnswer::Secret { value, remember }) => {
-                        if remember && let Some(key) = resolved.and_then(|r| r.key.as_ref()) {
+                        if remember && let Some(key) = key.as_ref() {
                             let mut data = key.data.clone();
                             data.passphrase = Some(value.to_string());
                             let _ = state.store()?.update(key.id, &data);
@@ -1757,8 +1792,8 @@ async fn ssh_connect<R: Runtime>(
                 e @ (Fido2Error::PinRequired | Fido2Error::PinInvalid { .. }),
             )) if attempts < MAX_PASSWORD_ATTEMPTS => {
                 attempts += 1;
-                let label = resolved
-                    .and_then(|r| r.key.as_ref())
+                let label = key
+                    .as_ref()
                     .map(|k| k.data.label.clone())
                     .or_else(|| {
                         resolved
@@ -1833,6 +1868,105 @@ pub(crate) fn proxy_config(
         username,
         password: password.filter(|_| kind.supports_password()),
     })
+}
+
+/// Everything a keychain identity contributes to a login attempt.
+struct IdentityLogin {
+    identity: Entity<Identity>,
+    password: Option<Zeroizing<String>>,
+    passphrase: Option<Zeroizing<String>>,
+    key: Option<Entity<termoso_core::model::SshKey>>,
+    certificate: Option<Entity<termoso_core::model::SshCertificate>>,
+}
+
+/// Load identity `id` with its key and certificate, the way host resolution does.
+async fn identity_login(state: &AppState, id: Uuid) -> Result<IdentityLogin> {
+    let (identity, key, certificate) = {
+        let store = state.store()?;
+        let identity = store.require::<Identity>(id)?;
+        let vault = identity.vault_id;
+        let key = match identity.data.ssh_key_id {
+            Some(k) => store.get_in::<termoso_core::model::SshKey>(k, vault)?,
+            None => None,
+        };
+        let certificate = match identity.data.ssh_certificate_id {
+            Some(c) => store.get_in::<termoso_core::model::SshCertificate>(c, vault)?,
+            None => match &key {
+                Some(k) => store
+                    .list::<termoso_core::model::SshCertificate>(Some(vault))?
+                    .into_iter()
+                    .find(|c| c.data.ssh_key_id == Some(k.id)),
+                None => None,
+            },
+        };
+        (identity, key, certificate)
+    };
+    let mut password = identity
+        .data
+        .password
+        .clone()
+        .filter(|p| !p.is_empty())
+        .map(Zeroizing::new);
+    let mut passphrase = key
+        .as_ref()
+        .and_then(|k| k.data.passphrase.clone())
+        .filter(|p| !p.is_empty())
+        .map(Zeroizing::new);
+    if let Some(p) = &password
+        && termoso_core::extsecret::is_reference(p)
+    {
+        password = Some(termoso_core::extsecret::resolve(p).await?);
+    }
+    if let Some(p) = &passphrase
+        && termoso_core::extsecret::is_reference(p)
+    {
+        passphrase = Some(termoso_core::extsecret::resolve(p).await?);
+    }
+    Ok(IdentityLogin {
+        identity,
+        password,
+        passphrase,
+        key,
+        certificate,
+    })
+}
+
+/// Make `identity_id` the identity of a saved host: set on the host's own SSH
+/// config, creating one when the host only inherited its settings.
+fn assign_identity(state: &AppState, resolved: &ResolvedHost, identity_id: Uuid) {
+    let Ok(store) = state.store() else {
+        return;
+    };
+    let result = (|| -> termoso_core::error::Result<()> {
+        if resolved.ssh.identity_id == Some(identity_id)
+            && resolved.host.data.ssh_config_id.is_some()
+        {
+            return Ok(());
+        }
+        let vault_id = resolved.host.vault_id;
+        match resolved.host.data.ssh_config_id {
+            Some(cfg_id) => {
+                let mut data = store.require::<SshConfig>(cfg_id)?.data;
+                data.identity_id = Some(identity_id);
+                store.update(cfg_id, &data)
+            }
+            None => {
+                let cfg_id = store.insert(
+                    vault_id,
+                    &SshConfig {
+                        identity_id: Some(identity_id),
+                        ..resolved.ssh.clone()
+                    },
+                )?;
+                let mut host = resolved.host.data.clone();
+                host.ssh_config_id = Some(cfg_id);
+                store.update(resolved.host.id, &host)
+            }
+        }
+    })();
+    if let Err(e) = result {
+        tracing::warn!(error = %e, "could not save the identity on the host");
+    }
 }
 
 /// Store a credential the user asked to remember on the host's identity

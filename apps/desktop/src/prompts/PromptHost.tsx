@@ -9,11 +9,13 @@ import {
   DialogContent,
   DialogTitle,
   FormControlLabel,
+  MenuItem,
   Stack,
   TextField,
   Typography,
 } from "@mui/material";
 import type { HostKeyInfo, PromptAnswer, PromptEvent } from "@/ipc/types";
+import { useHosts, useIdentities } from "@/ipc/hooks";
 import { useTerminal } from "@/terminal/store";
 import { Field } from "@/components/ui";
 import { answerPrompt, usePrompts } from "./store";
@@ -181,17 +183,7 @@ function PromptDialog({
         />
       );
     case "password":
-      return (
-        <SecretPrompt
-          inline={inline}
-          title={tr("Password for {username}", { username: prompt.username })}
-          target={prompt.target}
-          label={tr("Password")}
-          warning={prompt.retry ? tr("Authentication failed. Try again.") : null}
-          onAnswer={onAnswer}
-          onCancel={cancel}
-        />
-      );
+      return <PasswordPrompt prompt={prompt} inline={inline} onAnswer={onAnswer} />;
     case "passphrase":
       return (
         <SecretPrompt
@@ -445,6 +437,126 @@ function CertificatePrompt({
             public_key: "",
           }}
         />
+      </Stack>
+    </PromptFrame>
+  );
+}
+
+/**
+ * Password for an SSH login. When the stored credentials failed, the field can
+ * be swapped for any identity from the keychain; for a saved host the choice
+ * can be kept as the host's identity.
+ */
+function PasswordPrompt({
+  prompt,
+  inline,
+  onAnswer,
+}: {
+  prompt: Extract<PromptEvent, { kind: "password" }>;
+  inline?: boolean;
+  onAnswer: (a: PromptAnswer) => void;
+}) {
+  const [value, setValue] = useState("");
+  const [remember, setRemember] = useState(false);
+  const [identityId, setIdentityId] = useState("");
+  // Only the host's own vault is offered, like the host editor: an identity from
+  // another vault must not end up referenced by this host. Quick connections have
+  // no vault, so they get no picker.
+  const hostId = useTerminal((s) => s.panes[prompt.session_id]?.hostId ?? null);
+  const hosts = useHosts(null);
+  const vaultId = hostId ? (hosts.data?.find((h) => h.id === hostId)?.vaultId ?? null) : null;
+  const identities = useIdentities(vaultId);
+  const list = vaultId ? (identities.data ?? []) : [];
+  const savedHost = vaultId !== null;
+  const chosen = list.some((i) => i.id === identityId);
+  const cancel = () => onAnswer({ kind: "cancel" });
+  const submit = () =>
+    chosen
+      ? onAnswer({ kind: "identity", id: identityId, remember: remember && savedHost })
+      : onAnswer({ kind: "secret", value, remember });
+  return (
+    <PromptFrame
+      inline={inline}
+      title={tr("Password for {username}", { username: prompt.username })}
+      onClose={cancel}
+      maxWidth="xs"
+      actions={
+        <>
+          <Button color="inherit" onClick={cancel}>
+            {tr("Cancel")}
+          </Button>
+          <Button variant="contained" onClick={submit}>
+            {tr("Continue")}
+          </Button>
+        </>
+      }
+    >
+      <Stack
+        component="form"
+        spacing={1.5}
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit();
+        }}
+      >
+        <Typography variant="body2" color="text.secondary">
+          {prompt.target}
+        </Typography>
+        {prompt.retry && (
+          <Alert severity="warning">{tr("Authentication failed. Try again.")}</Alert>
+        )}
+        <Field label={tr("Password")}>
+          <TextField
+            autoFocus
+            type="password"
+            value={value}
+            disabled={chosen}
+            onChange={(e) => setValue(e.target.value)}
+            fullWidth
+            autoComplete="off"
+          />
+        </Field>
+        {list.length > 0 && (
+          <Field label={tr("Or sign in with an identity from your keychain")}>
+            <TextField
+              select
+              fullWidth
+              value={identityId}
+              onChange={(e) => setIdentityId(e.target.value)}
+              slotProps={{ select: { displayEmpty: true } }}
+            >
+              <MenuItem value="">
+                <em>{tr("None, use the password above")}</em>
+              </MenuItem>
+              {list.map((i) => (
+                <MenuItem key={i.id} value={i.id}>
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography variant="body2" noWrap>
+                      {i.label || i.username}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" noWrap>
+                      {[i.username, i.sshKeyLabel, i.hasPassword ? tr("password") : null]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </Typography>
+                  </Box>
+                </MenuItem>
+              ))}
+            </TextField>
+          </Field>
+        )}
+        {(!chosen || savedHost) && (
+          <FormControlLabel
+            control={
+              <Checkbox checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+            }
+            label={
+              chosen
+                ? tr("Use this identity for this host from now on")
+                : tr("Save to this host in the vault")
+            }
+          />
+        )}
       </Stack>
     </PromptFrame>
   );
