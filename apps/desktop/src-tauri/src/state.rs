@@ -559,9 +559,12 @@ impl Settings {
                 "restoreCommands must be type, run or never",
             ));
         }
-        if !matches!(self.update_check.as_str(), "manual" | "startup") {
+        if !matches!(
+            self.update_check.as_str(),
+            "manual" | "startup" | "every_6h" | "daily" | "weekly"
+        ) {
             return Err(DesktopError::invalid(
-                "updateCheck must be manual or startup",
+                "updateCheck must be manual, startup, every_6h, daily or weekly",
             ));
         }
         crate::update::feed_url(&self.update_url)?;

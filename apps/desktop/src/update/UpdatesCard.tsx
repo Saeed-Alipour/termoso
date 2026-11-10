@@ -61,6 +61,9 @@ export function UpdatesCard({
           >
             <MenuItem value="manual">{tr("Only when I ask")}</MenuItem>
             <MenuItem value="startup">{tr("Once at startup")}</MenuItem>
+            <MenuItem value="every_6h">{tr("Every 6 hours")}</MenuItem>
+            <MenuItem value="daily">{tr("Daily")}</MenuItem>
+            <MenuItem value="weekly">{tr("Weekly")}</MenuItem>
           </TextField>
         }
       />

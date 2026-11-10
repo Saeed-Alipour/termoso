@@ -162,7 +162,7 @@ export interface Settings {
   sftpOpenWith: Record<string, string>;
 }
 
-export type UpdateCheck = "manual" | "startup";
+export type UpdateCheck = "manual" | "startup" | "every_6h" | "daily" | "weekly";
 
 export type RestoreCommands = "type" | "run" | "never";
 
