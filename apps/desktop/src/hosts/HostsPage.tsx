@@ -101,6 +101,7 @@ import {
   hostProtocols,
 } from "@/ipc/types";
 import { openTerminal, useTerminal } from "@/terminal/store";
+import { useOpenQuick } from "./useOpenQuick";
 import { addToWorkspace, useWorkspaces, workspaceChoices } from "@/terminal/workspaces";
 import { openS3ForHost, openSftpForHost, openWebDavForHost } from "@/sftp/store";
 import {
@@ -346,6 +347,14 @@ export function HostsPage() {
   const deferredSearch = useDeferredValue(search);
   const q = deferredSearch.trim().toLowerCase();
   const filtering = q.length > 0 || tagFilter.length > 0;
+  /**
+   * `ssh root@10.0.0.5` or `root@10.0.0.5:2222` search by the address part, so
+   * the saved host behind it shows up while typing.
+   */
+  const targetNeedle = useMemo(() => {
+    const t = looksLikeTarget(q) ? parseQuickConnect(q) : null;
+    return t && (t.username || /^(ssh|telnet)\s/i.test(q)) ? t.address.toLowerCase() : null;
+  }, [q]);
   /** The open group and everything nested under it. */
   const subtree = useMemo(() => {
     if (!groupId) return null;
@@ -382,14 +391,15 @@ export function HostsPage() {
       : all.filter((h) => h.groupId === groupId);
     if (q) {
       scoped = scoped.filter((h) =>
-        [h.label, h.address, h.username, hostTarget(h), ...h.tags, ...h.groupPath].some((s) =>
-          s.toLowerCase().includes(q),
+        [h.label, h.address, h.username, hostTarget(h), ...h.tags, ...h.groupPath].some(
+          (s) =>
+            s.toLowerCase().includes(q) || (targetNeedle && s.toLowerCase().includes(targetNeedle)),
         ),
       );
     }
     if (tagFilter.length) scoped = scoped.filter((h) => tagFilter.every((t) => h.tags.includes(t)));
     return [...scoped].sort(comparators[sort]);
-  }, [hosts.data, groupId, q, tagFilter, filtering, sort, scope]);
+  }, [hosts.data, groupId, q, targetNeedle, tagFilter, filtering, sort, scope]);
 
   /* ------------------------------------------------------------ selection */
 
@@ -569,19 +579,22 @@ export function HostsPage() {
     openTerminal({ ...quickTarget, address: s.address, port: s.port ?? quickTarget.port });
     setSearch("");
   };
+  const openQuick = useOpenQuick(vaultId, readOnly, hosts.data ?? []);
   const onSearchEnter = () => {
     if (liveLink) {
       openTerminal({ kind: "live", link: liveLink });
       setSearch("");
       return;
     }
-    if (visibleHosts.length === 1 && visibleHosts[0]) {
+    // An explicit `user@host` / `ssh host` connects as typed (see below); the
+    // matching saved hosts stay in the list to pick with the arrow keys.
+    if (visibleHosts.length === 1 && visibleHosts[0] && !(targetNeedle && quickTarget)) {
       connectHost(visibleHosts[0]);
       setSearch("");
       return;
     }
     if (quickTarget) {
-      openTerminal(quickTarget);
+      openQuick(quickTarget);
       setSearch("");
     }
   };

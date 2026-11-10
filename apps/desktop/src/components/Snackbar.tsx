@@ -7,22 +7,29 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Alert, Snackbar, type AlertColor } from "@mui/material";
+import { Alert, Button, Snackbar, type AlertColor } from "@mui/material";
 import { tr } from "@/i18n";
+
+/** A button on the notice, e.g. "Save host"; clicking it dismisses the notice. */
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
 
 interface Toast {
   message: string;
   severity: AlertColor;
+  action?: ToastAction;
 }
 
 interface SnackbarApi {
-  notify: (message: string, severity?: AlertColor) => void;
+  notify: (message: string, severity?: AlertColor, action?: ToastAction) => void;
   error: (message: string) => void;
 }
 
 const Ctx = createContext<SnackbarApi | null>(null);
 
-let mounted: ((message: string, severity: AlertColor) => void) | null = null;
+let mounted: ((message: string, severity: AlertColor, action?: ToastAction) => void) | null = null;
 
 /** Show a toast from outside React (commands, event handlers). */
 export function toast(message: string, severity: AlertColor = "success") {
@@ -31,9 +38,12 @@ export function toast(message: string, severity: AlertColor = "success") {
 
 export function SnackbarProvider({ children }: { children: ReactNode }) {
   const [current, setCurrent] = useState<Toast | null>(null);
-  const notify = useCallback((message: string, severity: AlertColor = "success") => {
-    setCurrent({ message, severity });
-  }, []);
+  const notify = useCallback(
+    (message: string, severity: AlertColor = "success", action?: ToastAction) => {
+      setCurrent({ message, severity, action });
+    },
+    [],
+  );
   useEffect(() => {
     mounted = notify;
     return () => {
@@ -46,7 +56,7 @@ export function SnackbarProvider({ children }: { children: ReactNode }) {
       {children}
       <Snackbar
         open={current !== null}
-        autoHideDuration={4500}
+        autoHideDuration={current?.action ? 9000 : 4500}
         onClose={() => setCurrent(null)}
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       >
@@ -54,6 +64,20 @@ export function SnackbarProvider({ children }: { children: ReactNode }) {
           variant="filled"
           severity={current?.severity ?? "info"}
           onClose={() => setCurrent(null)}
+          action={
+            current?.action ? (
+              <Button
+                color="inherit"
+                size="small"
+                onClick={() => {
+                  current.action?.onClick();
+                  setCurrent(null);
+                }}
+              >
+                {current.action.label}
+              </Button>
+            ) : undefined
+          }
           sx={{ minWidth: 280 }}
         >
           {current?.message}
